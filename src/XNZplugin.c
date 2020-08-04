@@ -104,9 +104,14 @@ PLUGIN_API int XPluginEnable(void)
     XPLMHostApplicationID outHostID;
     int outXPlaneVersion, outXPLMVersion;
     XPLMGetVersions(&outXPlaneVersion, &outXPLMVersion, &outHostID);
-    if (outXPLMVersion < 210)
+    if (outXPLMVersion < 210) // currently pointless as we target XPLM210 at build time
     {
         xnz_log("x-nullzones [error]: XPluginEnable failed (outXPLMVersion: %d < 210)\n", outXPLMVersion);
+        return 0;
+    }
+    if (outXPlaneVersion > 1199)
+    {
+        xnz_log("x-nullzones [error]: XPluginEnable failed (outXPlaneVersion: %d > 1199)\n", outXPlaneVersion);
         return 0;
     }
 
