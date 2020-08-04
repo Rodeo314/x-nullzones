@@ -42,13 +42,13 @@ typedef struct
 }
 xnz_context;
 
-static const char *i_servo_datarefs[] =
+static const char *i_servo_dataref_names[] =
 {
     "sim/cockpit2/autopilot/servos_on",
     NULL,
 };
 
-static const char *f_servo_datarefs[] =
+static const char *f_servo_dataref_names[] =
 {
     NULL,
 };
@@ -198,16 +198,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
             {
                 // check for all supported autopilot/servo datarefs
-                for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_datarefs[i] != NULL && j < k; i++)
+                for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_dataref_names[i] != NULL && j < k; i++)
                 {
-                    if (NULL != (global_context->i_servos[j] = XPLMFindDataRef(i_servo_datarefs[i])))
+                    if (NULL != (global_context->i_servos[j] = XPLMFindDataRef(i_servo_dataref_names[i])))
                     {
                         j++;
                     }
                 }
-                for (size_t i = 0, j = 0, k = (sizeof(global_context->f_servos) / sizeof(global_context->f_servos[0])); f_servo_datarefs[i] != NULL && j < k; i++)
+                for (size_t i = 0, j = 0, k = (sizeof(global_context->f_servos) / sizeof(global_context->f_servos[0])); f_servo_dataref_names[i] != NULL && j < k; i++)
                 {
-                    if (NULL != (global_context->f_servos[j] = XPLMFindDataRef(f_servo_datarefs[i])))
+                    if (NULL != (global_context->f_servos[j] = XPLMFindDataRef(f_servo_dataref_names[i])))
                     {
                         j++;
                     }
@@ -230,6 +230,32 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     if (inRefcon)
     {
         xnz_context *ctx = inRefcon;
+
+        /* check servos on/off */
+        ctx->autopilot_servos_on = 0;
+        size_t i1 = 0, j1 = sizeof(ctx->i_servos) / sizeof(ctx->i_servos[0]);
+        size_t i2 = 0, j2 = sizeof(ctx->f_servos) / sizeof(ctx->f_servos[0]);
+        while (ctx->autopilot_servos_on == 0 &&
+               i1 < j1 && NULL != ctx->i_servos[i1])
+        {
+            if (XPLMGetDatai(ctx->i_servos[i1]) > 0)
+            {
+                ctx->autopilot_servos_on = 1;
+                break;
+            }
+            i1++; continue;
+        }
+        while (ctx->autopilot_servos_on == 0 &&
+               i2 < j2 && NULL != ctx->f_servos[i2])
+        {
+            if (XPLMGetDataf(ctx->f_servos[i2]) > 0.5f)
+            {
+                ctx->autopilot_servos_on = 1;
+                break;
+            }
+            i2++; continue;
+        }
+
         return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
