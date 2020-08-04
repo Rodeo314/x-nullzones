@@ -177,7 +177,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
                 global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[0]);
                 global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[1]);
-                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[2]);
+                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[2] / 2.0f);
                 xnz_log("x-nullzones: new aircraft: initial nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
                         global_context->prefs_nullzone[0],
                         global_context->prefs_nullzone[1],
@@ -234,8 +234,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
-#define AIRSPEED_MIN_KTS (50.0f)
-#define AIRSPEED_MAX_KTS (62.5f)
+#define AIRSPEED_MIN_KTS (50.000f)
+#define AIRSPEED_MAX_KTS (62.500f)
+#define GROUNDSP_MIN_KTS (03.125f)
+#define GROUNDSP_MAX_KTS (31.250f)
 static float callback_hdlr(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
                            int   inCounter,
@@ -287,10 +289,19 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             {
                 airspeed = AIRSPEED_MIN_KTS;
             }
-            float nullzone_pitch_roll = 0.125f - ((0.125f - ctx->minimum_null_zone) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
+            if (groundsp > GROUNDSP_MAX_KTS)
+            {
+                groundsp = GROUNDSP_MAX_KTS;
+            }
+            if (groundsp < GROUNDSP_MIN_KTS)
+            {
+                groundsp = GROUNDSP_MIN_KTS;
+            }
+            float nullzone_pitch_roll = 0.125f - ((0.125f - ctx->minimum_null_zone * 1.0f) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
+            float nullzone_yaw_tiller = 0.250f - ((0.250f - ctx->minimum_null_zone * 2.0f) * ((groundsp - GROUNDSP_MIN_KTS) / (GROUNDSP_MAX_KTS - GROUNDSP_MIN_KTS)));
             XPLMSetDataf(ctx->nullzone[0], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
-            XPLMSetDataf(ctx->nullzone[2], ctx->minimum_null_zone);//fixme
+            XPLMSetDataf(ctx->nullzone[2], nullzone_yaw_tiller);
         }
         return (1.0f / 20.0f); // run often
     }
@@ -299,6 +310,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
 }
 #undef AIRSPEED_MIN_KTS
 #undef AIRSPEED_MAX_KTS
+#undef GROUNDSP_MIN_KTS
+#undef GROUNDSP_MAX_KTS
 
 static int xnz_log(const char *format, ...)
 {
