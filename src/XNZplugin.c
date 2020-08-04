@@ -38,10 +38,22 @@ typedef struct
     XPLMDataRef i_servos[9];
     XPLMDataRef nullzone[3];
     float prefs_nullzone[3];
+    int autopilot_servos_on;
 }
 xnz_context;
 
-xnz_context *context = NULL;
+static const char *i_servo_datarefs[] =
+{
+    "sim/cockpit2/autopilot/servos_on",
+    NULL,
+};
+
+static const char *f_servo_datarefs[] =
+{
+    NULL,
+};
+
+xnz_context *global_context = NULL;
 
 static   int xnz_log(const char *format, va_list ap);
 static float callback_hdlr(float, float, int, void*);
@@ -82,47 +94,47 @@ PLUGIN_API void XPluginStop(void)
 PLUGIN_API int XPluginEnable(void)
 {
     /* Initialize context */
-    if (NULL == (context = malloc(sizeof(xnz_context))))
+    if (NULL == (global_context = malloc(sizeof(xnz_context))))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (malloc)\n"); goto fail;
     }
-    if (NULL == (context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
+    if (NULL == (global_context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[0])\n"); goto fail;
     }
-    if (NULL == (context->nullzone[1] = XPLMFindDataRef("sim/joystick/joystick_roll_nullzone")))
+    if (NULL == (global_context->nullzone[1] = XPLMFindDataRef("sim/joystick/joystick_roll_nullzone")))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[1])\n"); goto fail;
     }
-    if (NULL == (context->nullzone[2] = XPLMFindDataRef("sim/joystick/joystick_heading_nullzone")))
+    if (NULL == (global_context->nullzone[2] = XPLMFindDataRef("sim/joystick/joystick_heading_nullzone")))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[2])\n"); goto fail;
     }
-    if (NULL == (context->f_grd_speed = XPLMFindDataRef("sim/flightmodel/position/groundspeed")))
+    if (NULL == (global_context->f_grd_speed = XPLMFindDataRef("sim/flightmodel/position/groundspeed")))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_grd_speed)\n"); goto fail;
     }
-    if (NULL == (context->f_air_speed = XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")))
+    if (NULL == (global_context->f_air_speed = XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_air_speed)\n"); goto fail;
     }
 
     /* flight loop callback */
-    XPLMRegisterFlightLoopCallback((context->f_l_cb = &callback_hdlr), 0, context);
+    XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
 
     /* initialize arrays */
-    memset(context->f_servos, (int)NULL, sizeof(context->f_servos));
-    memset(context->i_servos, (int)NULL, sizeof(context->i_servos));
+    memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
+    memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     return 1;
 
 fail:
-    if (NULL != context)
+    if (NULL != global_context)
     {
-        free(context);
-        context = NULL;
+        free(global_context);
+        global_context = NULL;
     }
     return 0;
 }
@@ -130,18 +142,18 @@ fail:
 PLUGIN_API void XPluginDisable(void)
 {
     /* flight loop callback */
-    XPLMUnregisterFlightLoopCallback(context->f_l_cb, context);
+    XPLMUnregisterFlightLoopCallback(global_context->f_l_cb, global_context);
 
     /* reset nullzones to default/preferences values */
-    XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
-    XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
-    XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
+    XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
+    XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
+    XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
 
     /* close context */
-    if (NULL != context)
+    if (NULL != global_context)
     {
-        free(context);
-        context = NULL;
+        free(global_context);
+        global_context = NULL;
     }
 
     /* all good */
@@ -155,9 +167,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_PLANE_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
-                context->prefs_nullzone[0] = XPLMGetDataf(context->nullzone[0]);
-                context->prefs_nullzone[1] = XPLMGetDataf(context->nullzone[1]);
-                context->prefs_nullzone[2] = XPLMGetDataf(context->nullzone[2]);
+                global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
+                global_context->prefs_nullzone[1] = XPLMGetDataf(global_context->nullzone[1]);
+                global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
+                global_context->autopilot_servos_on = 0;
                 return;
             }
             break;
@@ -165,27 +178,41 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_PLANE_UNLOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
-                XPLMSetFlightLoopCallbackInterval(context->f_l_cb, 0, 1, context);
-                memset(context->f_servos, (int)NULL, sizeof(context->f_servos));
-                memset(context->i_servos, (int)NULL, sizeof(context->i_servos));
-                XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
-                XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
-                XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
+                XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 0, 1, global_context);
+                memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
+                memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
+                XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
+                XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
+                XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
                 return;
             }
             break;
 
         case XPLM_MSG_WILL_WRITE_PREFS:
-            XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
-            XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
-            XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
+            XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
+            XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
+            XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
             return;
 
         case XPLM_MSG_LIVERY_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
             {
-                //fixme
-                XPLMSetFlightLoopCallbackInterval(context->f_l_cb, 1, 1, context);
+                // check for all supported autopilot/servo datarefs
+                for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_datarefs[i] != NULL && j < k; i++)
+                {
+                    if (NULL != (global_context->i_servos[j] = XPLMFindDataRef(i_servo_datarefs[i])))
+                    {
+                        j++;
+                    }
+                }
+                for (size_t i = 0, j = 0, k = (sizeof(global_context->f_servos) / sizeof(global_context->f_servos[0])); f_servo_datarefs[i] != NULL && j < k; i++)
+                {
+                    if (NULL != (global_context->f_servos[j] = XPLMFindDataRef(f_servo_datarefs[i])))
+                    {
+                        j++;
+                    }
+                }
+                XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 1, 1, global_context);
                 return;
             }
             break;
@@ -202,12 +229,13 @@ static float callback_hdlr(float inElapsedSinceLastCall,
 {
     if (inRefcon)
     {
-        return -1;//fixme
+        xnz_context *ctx = inRefcon;
+        return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
-    XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
-    XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
-    XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
+    XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
+    XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
+    XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
     return 0;
 }
 
