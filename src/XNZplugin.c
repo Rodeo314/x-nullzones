@@ -34,6 +34,8 @@ typedef struct
     XPLMFlightLoop_f f_l_cb;
     XPLMDataRef f_air_speed;
     XPLMDataRef f_grd_speed;
+    XPLMDataRef f_servos[9];
+    XPLMDataRef i_servos[9];
     XPLMDataRef nullzone[3];
     float prefs_nullzone[3];
 }
@@ -86,19 +88,31 @@ PLUGIN_API int XPluginEnable(void)
     }
     if (NULL == (context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
     {
-        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[0])\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[0])\n"); goto fail;
     }
     if (NULL == (context->nullzone[1] = XPLMFindDataRef("sim/joystick/joystick_roll_nullzone")))
     {
-        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[1])\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[1])\n"); goto fail;
     }
     if (NULL == (context->nullzone[2] = XPLMFindDataRef("sim/joystick/joystick_heading_nullzone")))
     {
-        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[2])\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[2])\n"); goto fail;
+    }
+    if (NULL == (context->f_grd_speed = XPLMFindDataRef("sim/flightmodel/position/groundspeed")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_grd_speed)\n"); goto fail;
+    }
+    if (NULL == (context->f_air_speed = XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_air_speed)\n"); goto fail;
     }
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((context->f_l_cb = &callback_hdlr), 0, context);
+
+    /* initialize arrays */
+    memset(context->f_servos, (int)NULL, sizeof(context->f_servos));
+    memset(context->i_servos, (int)NULL, sizeof(context->i_servos));
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
@@ -144,15 +158,20 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 context->prefs_nullzone[0] = XPLMGetDataf(context->nullzone[0]);
                 context->prefs_nullzone[1] = XPLMGetDataf(context->nullzone[1]);
                 context->prefs_nullzone[2] = XPLMGetDataf(context->nullzone[2]);
+                return;
             }
             break;
 
         case XPLM_MSG_PLANE_UNLOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
+                XPLMSetFlightLoopCallbackInterval(context->f_l_cb, 0, 1, context);
+                memset(context->f_servos, (int)NULL, sizeof(context->f_servos));
+                memset(context->i_servos, (int)NULL, sizeof(context->i_servos));
                 XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
                 XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
                 XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
+                return;
             }
             break;
 
@@ -160,12 +179,14 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
             XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
             XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
-            break;
+            return;
 
         case XPLM_MSG_LIVERY_LOADED:
-            if (inParam == XPLM_USER_AIRCRAFT) // custom plugins loaded
+            if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
             {
                 //fixme
+                XPLMSetFlightLoopCallbackInterval(context->f_l_cb, 1, 1, context);
+                return;
             }
             break;
 
