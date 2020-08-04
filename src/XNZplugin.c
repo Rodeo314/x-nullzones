@@ -37,43 +37,61 @@ xnz_context;
 
 xnz_context *context = NULL;
 
-int xnz_plugin_start(char *outName, char *outSig, char *outDesc)
+#if IBM
+#include <windows.h>
+BOOL APIENTRY DllMain(HANDLE hModule,
+                      DWORD  ul_reason_for_call,
+                      LPVOID lpReserved)
+{
+    switch (ul_reason_for_call)
+    {
+        case DLL_PROCESS_ATTACH:
+        case DLL_THREAD_ATTACH:
+        case DLL_THREAD_DETACH:
+        case DLL_PROCESS_DETACH:
+            break;
+    }
+    return TRUE;
+}
+#endif
+
+PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc)
 {
     strncpy(outName,                                     "X-Nullzones", 255);
     strncpy(outSig,                                     "Rodeo314.XNZ", 255);
     strncpy(outDesc, "Dynamic nullzones and other miscellaneous stuff", 255);
 
     /* all good */
-    XPLMDebugString("x-nullzones [info]: xnz_plugin_start OK\n"); return 1;
+    XPLMDebugString("x-nullzones [info]: XPluginStart OK\n"); return 1;
 }
 
-void xnz_plugin_stop(void)
+PLUGIN_API void XPluginStop(void)
 {
     return;
 }
 
-int xnz_plugin_enable(void)
+PLUGIN_API int XPluginEnable(void)
 {
     /* Initialize context */
     if (NULL == (context = malloc(sizeof(xnz_context))))
     {
-        XPLMDebugString("x-nullzones [error]: xnz_plugin_enable failed (malloc)\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (malloc)\n"); goto fail;
     }
     if (NULL == (context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
     {
-        XPLMDebugString("x-nullzones [error]: xnz_plugin_enable failed (ref[0])\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[0])\n"); goto fail;
     }
     if (NULL == (context->nullzone[1] = XPLMFindDataRef("sim/joystick/joystick_roll_nullzone")))
     {
-        XPLMDebugString("x-nullzones [error]: xnz_plugin_enable failed (ref[1])\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[1])\n"); goto fail;
     }
     if (NULL == (context->nullzone[2] = XPLMFindDataRef("sim/joystick/joystick_heading_nullzone")))
     {
-        XPLMDebugString("x-nullzones [error]: xnz_plugin_enable failed (ref[2])\n"); goto fail;
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[2])\n"); goto fail;
     }
 
     /* all good */
-    XPLMDebugString("x-nullzones [info]: xnz_plugin_enable OK\n");
+    XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     return 1;
 
 fail:
@@ -85,7 +103,7 @@ fail:
     return 0;
 }
 
-void xnz_plugin_disable(void)
+PLUGIN_API void XPluginDisable(void)
 {
     /* reset nullzones to default/preferences values */
     XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
@@ -100,10 +118,10 @@ void xnz_plugin_disable(void)
     }
 
     /* all good */
-    XPLMDebugString("x-nullzones [info]: xnz_plugin_disable OK\n");
+    XPLMDebugString("x-nullzones [info]: XPluginDisable OK\n");
 }
 
-void xnz_plugin_message(XPLMPluginID inFromWho, long inMessage, void *inParam)
+PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, void *inParam)
 {
     switch (inMessage)
     {
