@@ -279,7 +279,10 @@ static int xnz_log(const char *format, ...)
     char string[1024];
     va_start(ap, format);
     ret = vsnprintf(string, sizeof(string), format, ap);
-    XPLMDebugString(string);
+    if (ret > 0) // output is NULL-terminated
+    {
+        XPLMDebugString(string);
+    }
     va_end(ap);
     return ret;
 }
