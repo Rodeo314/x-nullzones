@@ -26,10 +26,12 @@
 #include "XPLM/XPLMDataAccess.h"
 #include "XPLM/XPLMPlanes.h"
 #include "XPLM/XPLMPlugin.h"
+#include "XPLM/XPLMProcessing.h"
 #include "XPLM/XPLMUtilities.h"
 
 typedef struct
 {
+    XPLMFlightLoop_f f_l_cb;
     XPLMDataRef f_air_speed;
     XPLMDataRef f_grd_speed;
     XPLMDataRef nullzone[3];
@@ -39,7 +41,8 @@ xnz_context;
 
 xnz_context *context = NULL;
 
-static int xnz_log(const char *format, va_list ap);
+static   int xnz_log(const char *format, va_list ap);
+static float callback_hdlr(float, float, int, void*);
 
 #if IBM
 #include <windows.h>
@@ -94,6 +97,9 @@ PLUGIN_API int XPluginEnable(void)
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ref[2])\n"); goto fail;
     }
 
+    /* flight loop callback */
+    XPLMRegisterFlightLoopCallback((context->f_l_cb = &callback_hdlr), 0, context);
+
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     return 1;
@@ -109,6 +115,9 @@ fail:
 
 PLUGIN_API void XPluginDisable(void)
 {
+    /* flight loop callback */
+    XPLMUnregisterFlightLoopCallback(context->f_l_cb, context);
+
     /* reset nullzones to default/preferences values */
     XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
     XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
@@ -163,6 +172,22 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         default:
             break;
     }
+}
+
+static float callback_hdlr(float inElapsedSinceLastCall,
+                           float inElapsedTimeSinceLastFlightLoop,
+                           int   inCounter,
+                           void *inRefcon)
+{
+    if (inRefcon)
+    {
+        return -1;//fixme
+    }
+    XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
+    XPLMSetDataf(context->nullzone[0], context->prefs_nullzone[0]);
+    XPLMSetDataf(context->nullzone[1], context->prefs_nullzone[1]);
+    XPLMSetDataf(context->nullzone[2], context->prefs_nullzone[2]);
+    return 0;
 }
 
 static int xnz_log(const char *format, va_list ap)
