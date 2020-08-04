@@ -55,7 +55,7 @@ static const char *f_servo_dataref_names[] =
 
 xnz_context *global_context = NULL;
 
-static   int xnz_log(const char *format, va_list ap);
+static   int xnz_log       (const char *format, ...);
 static float callback_hdlr(float, float, int, void*);
 
 #if IBM
@@ -272,11 +272,14 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     return 0;
 }
 
-static int xnz_log(const char *format, va_list ap)
+static int xnz_log(const char *format, ...)
 {
     int ret;
+    va_list ap;
     char string[1024];
+    va_start(ap, format);
     ret = vsnprintf(string, sizeof(string), format, ap);
     XPLMDebugString(string);
+    va_end(ap);
     return ret;
 }
