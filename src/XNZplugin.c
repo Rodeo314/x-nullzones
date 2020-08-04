@@ -233,9 +233,6 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
-    XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
-    XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
-    XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
     return 0;
 }
 
