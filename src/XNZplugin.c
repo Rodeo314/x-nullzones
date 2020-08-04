@@ -23,6 +23,7 @@
 
 #include "XPLM/XPLMPlanes.h"
 #include "XPLM/XPLMPlugin.h"
+#include "XPLM/XPLMUtilities.h"
 
 /* Miscellaneous data */
 int xplane_first_load = 1;
@@ -84,7 +85,6 @@ void xnz_plugin_message(XPLMPluginID inFromWho,
             break;
 
         case XPLM_MSG_SCENERY_LOADED:
-            xnz_menu_reset(navpmenu_context);
             break;
 
         case XPLM_MSG_AIRPLANE_COUNT_CHANGED:
