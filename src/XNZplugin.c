@@ -18,6 +18,7 @@
  *     Timothy D. Walker
  */
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,8 @@
 #include "XPLM/XPLMProcessing.h"
 #include "XPLM/XPLMUtilities.h"
 
+#define MPS2KTS(MPS) (MPS * 3.6f / 1.852f)
+
 typedef struct
 {
     XPLMFlightLoop_f f_l_cb;
@@ -38,6 +41,7 @@ typedef struct
     XPLMDataRef i_servos[9];
     XPLMDataRef nullzone[3];
     float prefs_nullzone[3];
+    float minimum_null_zone;
     int autopilot_servos_on;
 }
 xnz_context;
@@ -167,9 +171,18 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_PLANE_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
+                global_context->minimum_null_zone = 0.025f;
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
                 global_context->prefs_nullzone[1] = XPLMGetDataf(global_context->nullzone[1]);
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
+                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[0]);
+                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[1]);
+                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[2]);
+                xnz_log("x-nullzones: new aircraft: initial nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
+                        global_context->prefs_nullzone[0],
+                        global_context->prefs_nullzone[1],
+                        global_context->prefs_nullzone[2],
+                        global_context->minimum_null_zone);
                 return;
             }
             break;
@@ -221,6 +234,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
+#define AIRSPEED_MIN_KTS (50.0f)
+#define AIRSPEED_MAX_KTS (62.5f)
 static float callback_hdlr(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
                            int   inCounter,
@@ -262,15 +277,28 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
         else
         {
-            XPLMSetDataf(ctx->nullzone[0], 0.025f);
-            XPLMSetDataf(ctx->nullzone[1], 0.025f);
-            XPLMSetDataf(ctx->nullzone[2], 0.025f);
+            float airspeed = XPLMGetDataf(ctx->f_air_speed);
+            float groundsp = MPS2KTS(XPLMGetDataf(ctx->f_grd_speed));
+            if (airspeed > AIRSPEED_MAX_KTS)
+            {
+                airspeed = AIRSPEED_MAX_KTS;
+            }
+            if (airspeed < AIRSPEED_MIN_KTS)
+            {
+                airspeed = AIRSPEED_MIN_KTS;
+            }
+            float nullzone_pitch_roll = 0.125f - ((0.125f - ctx->minimum_null_zone) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
+            XPLMSetDataf(ctx->nullzone[0], nullzone_pitch_roll);
+            XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
+            XPLMSetDataf(ctx->nullzone[2], ctx->minimum_null_zone);//fixme
         }
         return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
     return 0;
 }
+#undef AIRSPEED_MIN_KTS
+#undef AIRSPEED_MAX_KTS
 
 static int xnz_log(const char *format, ...)
 {
@@ -286,3 +314,5 @@ static int xnz_log(const char *format, ...)
     va_end(ap);
     return ret;
 }
+
+#undef MPS2KTS
