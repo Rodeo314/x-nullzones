@@ -31,6 +31,7 @@
 #include "XPLM/XPLMUtilities.h"
 
 #define MPS2KTS(MPS) (MPS * 3.6f / 1.852f)
+#define YAW_NZ_FACTR (2.0f)
 
 typedef struct
 {
@@ -177,7 +178,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
                 global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[0]);
                 global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[1]);
-                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[2] / 2.0f);
+                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[2] / YAW_NZ_FACTR);
                 xnz_log("x-nullzones: new aircraft: initial nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
                         global_context->prefs_nullzone[0],
                         global_context->prefs_nullzone[1],
@@ -297,8 +298,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             {
                 groundsp = GROUNDSP_MIN_KTS;
             }
-            float nullzone_pitch_roll = 0.125f - ((0.125f - ctx->minimum_null_zone * 1.0f) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
-            float nullzone_yaw_tiller = 0.250f - ((0.250f - ctx->minimum_null_zone * 2.0f) * ((groundsp - GROUNDSP_MIN_KTS) / (GROUNDSP_MAX_KTS - GROUNDSP_MIN_KTS)));
+            float nullzone_pitch_roll =         1.0f * 0.125f - ((0.125f - ctx->minimum_null_zone) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
+            float nullzone_yaw_tiller = YAW_NZ_FACTR * 0.125f - ((0.125f - ctx->minimum_null_zone) * ((groundsp - GROUNDSP_MIN_KTS) / (GROUNDSP_MAX_KTS - GROUNDSP_MIN_KTS)));
             XPLMSetDataf(ctx->nullzone[0], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[2], nullzone_yaw_tiller);
@@ -329,3 +330,4 @@ static int xnz_log(const char *format, ...)
 }
 
 #undef MPS2KTS
+#undef YAW_NZ_FACTR
