@@ -255,7 +255,18 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             }
             i2++; continue;
         }
-
+        if (ctx->autopilot_servos_on)
+        {
+            XPLMSetDataf(ctx->nullzone[0], 0.500f);
+            XPLMSetDataf(ctx->nullzone[1], 0.500f);
+            XPLMSetDataf(ctx->nullzone[2], 0.500f);
+        }
+        else
+        {
+            XPLMSetDataf(ctx->nullzone[0], 0.025f);
+            XPLMSetDataf(ctx->nullzone[1], 0.025f);
+            XPLMSetDataf(ctx->nullzone[2], 0.025f);
+        }
         return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
