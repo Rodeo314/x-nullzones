@@ -18,6 +18,8 @@
  *     Timothy D. Walker
  */
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,6 +38,8 @@ typedef struct
 xnz_context;
 
 xnz_context *context = NULL;
+
+static int xnz_log(const char *format, va_list ap);
 
 #if IBM
 #include <windows.h>
@@ -159,4 +163,13 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         default:
             break;
     }
+}
+
+static int xnz_log(const char *format, va_list ap)
+{
+    int ret;
+    char string[1024];
+    ret = vsnprintf(string, sizeof(string), format, ap);
+    XPLMDebugString(string);
+    return ret;
 }
