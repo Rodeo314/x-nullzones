@@ -35,6 +35,8 @@
 
 typedef struct
 {
+    int i_version_simulator;
+    int i_version_xplm_apis;
     XPLMFlightLoop_f f_l_cb;
     XPLMDataRef f_air_speed;
     XPLMDataRef f_grd_speed;
@@ -98,6 +100,16 @@ PLUGIN_API void XPluginStop(void)
 
 PLUGIN_API int XPluginEnable(void)
 {
+    /* check for unsupported versions */
+    XPLMHostApplicationID outHostID;
+    int outXPlaneVersion, outXPLMVersion;
+    XPLMGetVersions(&outXPlaneVersion, &outXPLMVersion, &outHostID);
+    if (outXPLMVersion < 210)
+    {
+        xnz_log("x-nullzones [error]: XPluginEnable failed (outXPLMVersion: %d < 210)\n", outXPLMVersion);
+        return 0;
+    }
+
     /* Initialize context */
     if (NULL == (global_context = malloc(sizeof(xnz_context))))
     {
@@ -133,6 +145,8 @@ PLUGIN_API int XPluginEnable(void)
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
+    global_context->i_version_simulator = outXPlaneVersion;
+    global_context->i_version_xplm_apis = outXPLMVersion;
     return 1;
 
 fail:
