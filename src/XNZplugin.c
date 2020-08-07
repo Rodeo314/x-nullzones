@@ -109,9 +109,9 @@ PLUGIN_API int XPluginEnable(void)
         xnz_log("x-nullzones [error]: XPluginEnable failed (outXPLMVersion: %d < 210)\n", outXPLMVersion);
         return 0;
     }
-    if (outXPlaneVersion > 1199)
+    if (outXPlaneVersion > 11999)
     {
-        xnz_log("x-nullzones [error]: XPluginEnable failed (outXPlaneVersion: %d > 1199)\n", outXPlaneVersion);
+        xnz_log("x-nullzones [error]: XPluginEnable failed (outXPlaneVersion: %d > 11999)\n", outXPlaneVersion);
         return 0;
     }
 
