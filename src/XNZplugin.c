@@ -300,6 +300,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         j++;
                     }
                 }
+                global_context->ice_detect_positive = 0;
+                global_context->icecheck_required = 0.0f;
+                global_context->show_throttle_all = 0.0f;
                 global_context->last_throttle_all = XPLMGetDataf(global_context->f_throttall);
                 XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 1, 1, global_context);
                 return;
