@@ -24,6 +24,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "Widgets/XPStandardWidgets.h"
+#include "Widgets/XPWidgets.h"
 #include "XPLM/XPLMDataAccess.h"
 #include "XPLM/XPLMPlanes.h"
 #include "XPLM/XPLMPlugin.h"
@@ -49,6 +51,15 @@ typedef struct
     XPLMDataRef acf_roll_co;
     XPLMDataRef ongroundany;
     float nominal_roll_coef;
+    XPLMDataRef f_throttall;
+    float last_throttle_all;
+    float show_throttle_all;
+    float icecheck_required;
+    char overlay_textbuf[9];
+    int throttle_did_change;
+    int ice_detect_positive;
+    XPLMDataRef f_ice_rf[4];
+    XPWidgetID  widgetid[2];
 }
 xnz_context;
 
@@ -151,6 +162,32 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ongroundany)\n"); goto fail;
     }
+    if (NULL == (global_context->f_throttall = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio_all")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_throt_all)\n"); goto fail;
+    }
+    if (NULL == (global_context->f_ice_rf[0] = XPLMFindDataRef("sim/flightmodel/failures/pitot_ice")) ||
+        NULL == (global_context->f_ice_rf[1] = XPLMFindDataRef("sim/flightmodel/failures/inlet_ice")) ||
+        NULL == (global_context->f_ice_rf[2] = XPLMFindDataRef("sim/flightmodel/failures/prop_ice")) ||
+        NULL == (global_context->f_ice_rf[3] = XPLMFindDataRef("sim/flightmodel/failures/frm_ice")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_ice_rf)\n"); goto fail;
+    }
+    if (!(global_context->widgetid[0] = XPCreateWidget(0, 0, 0, 0, 0, "", 1, NULL,
+                                                       xpWidgetClass_MainWindow)))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (widgetid)\n"); goto fail;
+    }
+    if (!(global_context->widgetid[1] = XPCreateWidget(0, 0, 0, 0, 0, "", 0,
+                                                       global_context->widgetid[0],
+                                                       xpWidgetClass_Caption)))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (widgetid)\n"); goto fail;
+    }
+    XPSetWidgetProperty(global_context->widgetid[0], xpProperty_MainWindowType, xpMainWindowStyle_Translucent);
+    XPSetWidgetProperty(global_context->widgetid[1], xpProperty_CaptionLit, 1);
+    XPSetWidgetGeometry(global_context->widgetid[0], 00, 56, 64, 00);
+    XPSetWidgetGeometry(global_context->widgetid[1], 12, 46, 56, 10);
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
@@ -199,6 +236,32 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 {
     switch (inMessage)
     {
+        case XPLM_MSG_WILL_WRITE_PREFS:
+            XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
+            XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
+            XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
+            XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
+            return;
+
+        case XPLM_MSG_PLANE_UNLOADED:
+            if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
+            {
+                XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 0, 1, global_context);
+                memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
+                memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
+                XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
+                XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
+                XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
+                XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
+                if (XPIsWidgetVisible(global_context->widgetid[1]) != 0)
+                {
+                    XPHideWidget(global_context->widgetid[0]);
+                    XPHideWidget(global_context->widgetid[1]);
+                }
+                return;
+            }
+            break;
+
         case XPLM_MSG_PLANE_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
@@ -219,27 +282,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             }
             break;
 
-        case XPLM_MSG_PLANE_UNLOADED:
-            if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
-            {
-                XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 0, 1, global_context);
-                memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
-                memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
-                XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
-                XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
-                XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
-                XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
-                return;
-            }
-            break;
-
-        case XPLM_MSG_WILL_WRITE_PREFS:
-            XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
-            XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
-            XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
-            XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
-            return;
-
         case XPLM_MSG_LIVERY_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
             {
@@ -258,6 +300,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         j++;
                     }
                 }
+                global_context->last_throttle_all = XPLMGetDataf(global_context->f_throttall);
                 XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 1, 1, global_context);
                 return;
             }
@@ -268,6 +311,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
+#define T_ZERO            (.0001f)
 #define AIRSPEED_MIN_KTS (50.000f)
 #define AIRSPEED_MAX_KTS (62.500f)
 #define GROUNDSP_MIN_KTS (03.125f)
@@ -305,6 +349,101 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                 XPLMSetDataf(ctx->acf_roll_co, arc);
             }
             XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
+        }
+
+        /* throttle position readout (overlay) */
+        float f_throttall = XPLMGetDataf(ctx->f_throttall), thra[2];
+        // if (grndp->idle.thrott_array)
+        // {
+        //     XPLMGetDatavf(grndp->idle.thrott_array, thra, 0, 2);
+        //     f_throttall = (((((thra[0] + thra[1]) / 2.0f))));
+        // }
+        // else if (assrt)
+        // {
+        //     // Aircraft.Cockpit.Pedestal.EngineLever1: 0-20-65 (rev-idle-max)
+        //     assrt->api.ValueGet(assrt->dat.id_f32_p_engines_lever1, &thra[0]);
+        //     assrt->api.ValueGet(assrt->dat.id_f32_p_engines_lever1, &thra[1]);
+        //     if ((f_throttall = (((thra[0] + thra[1]) / 2.0f) - 20.0f) / 45.0f) < 0.0f)
+        //     {
+        //         (f_throttall = (((thra[0] + thra[1]) / 2.0f) - 20.0f) / 20.0f);
+        //     }
+        // }
+        // […]
+        if (fabsf(ctx->last_throttle_all - f_throttall) > 0.02f) // 2.0%
+        {
+            ctx->throttle_did_change = 1;
+            ctx->show_throttle_all = 3.0f;
+            ctx->last_throttle_all = f_throttall;
+        }
+        if (ctx->show_throttle_all < T_ZERO ||
+            // XPLMGetDatai(grndp->auto_t_sts)   || // fixme
+            ctx->ice_detect_positive)
+        {
+            ctx->throttle_did_change = 0;
+            ctx->show_throttle_all = 0.0f;
+        }
+        else
+        {
+            ctx->show_throttle_all -= inElapsedSinceLastCall;
+        }
+
+        /* icing detection: every 10 seconds */
+        if ((ctx->icecheck_required += inElapsedSinceLastCall) >= 10.0f)
+        {
+            if (XPLMGetDataf(ctx->f_ice_rf[0]) > 0.04f ||
+                XPLMGetDataf(ctx->f_ice_rf[1]) > 0.04f ||
+                XPLMGetDataf(ctx->f_ice_rf[2]) > 0.04f ||
+                XPLMGetDataf(ctx->f_ice_rf[3]) > 0.04f)
+            {
+                if (ctx->ice_detect_positive == 0)
+                {
+                    XPSetWidgetDescriptor(ctx->widgetid[1], "ICE");
+                    XPLMSpeakString("ice detected");
+                }
+                ctx->ice_detect_positive = 1;
+                ctx->throttle_did_change = 0;
+            }
+            else if (XPLMGetDataf(ctx->f_ice_rf[0]) < 0.02f &&
+                     XPLMGetDataf(ctx->f_ice_rf[1]) < 0.02f &&
+                     XPLMGetDataf(ctx->f_ice_rf[2]) < 0.02f &&
+                     XPLMGetDataf(ctx->f_ice_rf[3]) < 0.02f)
+            {
+                ctx->ice_detect_positive = 0;
+            }
+            ctx->icecheck_required = 0.0f;
+        }
+        if (ctx->ice_detect_positive || ctx->throttle_did_change)
+        {
+            if (ctx->throttle_did_change)
+            {
+                snprintf(ctx->overlay_textbuf, 9, "%5.3f", f_throttall);
+                XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overlay_textbuf);
+            }
+            if (XPIsWidgetVisible(ctx->widgetid[1]) == 0)
+            {
+                XPShowWidget(ctx->widgetid[0]);
+                XPShowWidget(ctx->widgetid[1]);
+            }
+        }
+        else if (groundsp > GROUNDSP_KTS_V00 &&
+                 groundsp < GROUNDSP_KTS_V02 &&
+                 XPLMGetDatai(ctx->ongroundany))
+        {
+            snprintf(ctx->overlay_textbuf, 9, "%2.0f kts", groundsp);
+            XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overlay_textbuf);
+            if (XPIsWidgetVisible(ctx->widgetid[1]) == 0)
+            {
+                XPShowWidget(ctx->widgetid[0]);
+                XPShowWidget(ctx->widgetid[1]);
+            }
+        }
+        else
+        {
+            if (XPIsWidgetVisible(ctx->widgetid[1]) != 0)
+            {
+                XPHideWidget(ctx->widgetid[0]);
+                XPHideWidget(ctx->widgetid[1]);
+            }
         }
 
         /* check servos on/off */
@@ -361,6 +500,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[2], nullzone_yaw_tiller);
         }
+        ctx->last_throttle_all = f_throttall;
         return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
@@ -374,6 +514,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
 #undef GROUNDSP_KTS_V01
 #undef GROUNDSP_KTS_V02
 #undef ACF_ROLL_SET
+#undef T_ZERO
 
 static int xnz_log(const char *format, ...)
 {
