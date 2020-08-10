@@ -47,6 +47,7 @@
 
 typedef struct
 {
+    int i_context_init_done;
     int i_version_simulator;
     int i_version_xplm_apis;
     XPLMFlightLoop_f f_l_cb;
@@ -227,6 +228,7 @@ PLUGIN_API int XPluginEnable(void)
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     global_context->i_version_simulator = outXPlaneVersion;
     global_context->i_version_xplm_apis = outXPLMVersion;
+    global_context->i_context_init_done = 0;
     return 1;
 
 fail:
@@ -303,6 +305,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     XPHideWidget(global_context->widgetid[0]);
                     XPHideWidget(global_context->widgetid[1]);
                 }
+                global_context->i_context_init_done = 0;
                 global_context->use_320ultimate_api = 0;
                 global_context->f_thr_array = NULL;
                 return;
@@ -330,7 +333,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             break;
 
         case XPLM_MSG_LIVERY_LOADED:
-            if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
+            if (inParam == XPLM_USER_AIRCRAFT && !global_context->i_context_init_done) // wait until aircraft plugins loaded (for custom datarefs)
             {
                 XPLMPluginID test = XPLM_NO_PLUGIN_ID;
 
@@ -379,6 +382,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
 
                 // init data, start flightloop callback
+                global_context->i_context_init_done = 1;
                 global_context->ice_detect_positive = 0;
                 global_context->icecheck_required = 0.0f;
                 global_context->show_throttle_all = 0.0f;
