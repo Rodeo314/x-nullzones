@@ -203,6 +203,10 @@ PLUGIN_API int XPluginEnable(void)
     return 1;
 
 fail:
+    if (global_context->widgetid[0] != 0)
+    {
+        XPDestroyWidget(global_context->widgetid[0], 1);
+    }
     if (NULL != global_context)
     {
         free(global_context);
@@ -220,6 +224,18 @@ PLUGIN_API void XPluginDisable(void)
     XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
     XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
     XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
+    XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
+
+    /* clean up our widgets */
+    if (XPIsWidgetVisible(global_context->widgetid[1]) != 0)
+    {
+        XPHideWidget(global_context->widgetid[0]);
+        XPHideWidget(global_context->widgetid[1]);
+    }
+    if (global_context->widgetid[0] != 0)
+    {
+        XPDestroyWidget(global_context->widgetid[0], 1);
+    }
 
     /* close context */
     if (NULL != global_context)
