@@ -32,6 +32,16 @@
 #include "XPLM/XPLMProcessing.h"
 #include "XPLM/XPLMUtilities.h"
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wignored-attributes"
+#endif
+#include <stdbool.h>
+#include "sharedvalue.h"
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
 #define MPS2KTS(MPS) (MPS * 3.6f / 1.852f)
 #define YAW_NZ_FACTR (2.0f)
 
@@ -52,6 +62,9 @@ typedef struct
     XPLMDataRef acf_roll_co;
     XPLMDataRef ongroundany;
     float nominal_roll_coef;
+    int use_320ultimate_api;
+    SharedValuesInterface s;
+    XPLMDataRef f_thr_array;
     XPLMDataRef f_throttall;
     float last_throttle_all;
     float show_throttle_all;
@@ -290,6 +303,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     XPHideWidget(global_context->widgetid[0]);
                     XPHideWidget(global_context->widgetid[1]);
                 }
+                global_context->use_320ultimate_api = 0;
+                global_context->f_thr_array = NULL;
                 return;
             }
             break;
@@ -317,6 +332,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_LIVERY_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
             {
+                XPLMPluginID test = XPLM_NO_PLUGIN_ID;
+
                 // check for all supported autopilot/servo/autothrottle datarefs
                 for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_dataref_names[i] != NULL && j < k; i++)
                 {
@@ -346,6 +363,22 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         j++;
                     }
                 }
+
+                // check for custom throttle datarefs/API
+                if ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(XPLM_FF_SIGNATURE))) && (XPLMIsPluginEnabled(test)))
+                {
+                    global_context->use_320ultimate_api = -1;
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
+                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))) ||
+                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
+                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))) ||
+                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(   "ToLiSs.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.4.8
+                {
+                    global_context->f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input");
+                }
+
+                // init data, start flightloop callback
                 global_context->ice_detect_positive = 0;
                 global_context->icecheck_required = 0.0f;
                 global_context->show_throttle_all = 0.0f;
@@ -398,6 +431,15 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                 XPLMSetDataf(ctx->acf_roll_co, arc);
             }
             XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
+        }
+
+        if (ctx->use_320ultimate_api == -1)
+        {
+            XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->s);
+            if (ctx->s.DataVersion != NULL || ctx->s.DataAddUpdate != NULL)
+            {
+                ctx->use_320ultimate_api = 1;//fixme
+            }
         }
 
         /* check autopilot and autothrust status */
