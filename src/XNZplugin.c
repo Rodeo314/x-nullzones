@@ -397,7 +397,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
-#define T_ZERO            (.0001f)
+#define T_ZERO           (00.001f)
 #define AIRSPEED_MIN_KTS (50.000f)
 #define AIRSPEED_MAX_KTS (62.500f)
 #define GROUNDSP_MIN_KTS (03.125f)
