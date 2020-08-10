@@ -479,7 +479,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             }
             ia1++; continue;
         }
-        while (autothrottle_active == 0 && fa1 < fp2 && NULL != ctx->f_autoth[fa1])
+        while (autothrottle_active == 0 && fa1 < fa2 && NULL != ctx->f_autoth[fa1])
         {
             if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
             {
