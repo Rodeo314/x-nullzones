@@ -44,10 +44,11 @@ typedef struct
     XPLMDataRef f_grd_speed;
     XPLMDataRef f_servos[9];
     XPLMDataRef i_servos[9];
+    XPLMDataRef i_autoth[9];
+    XPLMDataRef f_autoth[9];
     XPLMDataRef nullzone[3];
     float prefs_nullzone[3];
     float minimum_null_zone;
-    int autopilot_servos_on;
     XPLMDataRef acf_roll_co;
     XPLMDataRef ongroundany;
     float nominal_roll_coef;
@@ -70,6 +71,17 @@ static const char *i_servo_dataref_names[] =
 };
 
 static const char *f_servo_dataref_names[] =
+{
+    NULL,
+};
+
+static const char *i_autot_dataref_names[] =
+{
+    "sim/cockpit2/autopilot/autothrottle_enabled",
+    NULL,
+};
+
+static const char *f_autot_dataref_names[] =
 {
     NULL,
 };
@@ -195,6 +207,8 @@ PLUGIN_API int XPluginEnable(void)
     /* initialize arrays */
     memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
     memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
+    memset(global_context->i_autoth, (int)NULL, sizeof(global_context->i_autoth));
+    memset(global_context->f_autoth, (int)NULL, sizeof(global_context->f_autoth));
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
@@ -265,6 +279,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 0, 1, global_context);
                 memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
                 memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
+                memset(global_context->i_autoth, (int)NULL, sizeof(global_context->i_autoth));
+                memset(global_context->f_autoth, (int)NULL, sizeof(global_context->f_autoth));
                 XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
                 XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
                 XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
@@ -301,7 +317,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_LIVERY_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // wait until aircraft plugins loaded (for custom datarefs)
             {
-                // check for all supported autopilot/servo datarefs
+                // check for all supported autopilot/servo/autothrottle datarefs
                 for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_dataref_names[i] != NULL && j < k; i++)
                 {
                     if (NULL != (global_context->i_servos[j] = XPLMFindDataRef(i_servo_dataref_names[i])))
@@ -312,6 +328,20 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 for (size_t i = 0, j = 0, k = (sizeof(global_context->f_servos) / sizeof(global_context->f_servos[0])); f_servo_dataref_names[i] != NULL && j < k; i++)
                 {
                     if (NULL != (global_context->f_servos[j] = XPLMFindDataRef(f_servo_dataref_names[i])))
+                    {
+                        j++;
+                    }
+                }
+                for (size_t i = 0, j = 0, k = (sizeof(global_context->i_autoth) / sizeof(global_context->i_autoth[0])); i_autot_dataref_names[i] != NULL && j < k; i++)
+                {
+                    if (NULL != (global_context->i_autoth[j] = XPLMFindDataRef(i_autot_dataref_names[i])))
+                    {
+                        j++;
+                    }
+                }
+                for (size_t i = 0, j = 0, k = (sizeof(global_context->f_autoth) / sizeof(global_context->f_autoth[0])); f_autot_dataref_names[i] != NULL && j < k; i++)
+                {
+                    if (NULL != (global_context->f_autoth[j] = XPLMFindDataRef(f_autot_dataref_names[i])))
                     {
                         j++;
                     }
@@ -370,6 +400,49 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
         }
 
+        /* check autopilot and autothrust status */
+        int autopilot_servos_on = 0, autothrottle_active = 0;
+        size_t ip1 = 0, ip2 = sizeof(ctx->i_servos) / sizeof(ctx->i_servos[0]);
+        size_t fp1 = 0, fp2 = sizeof(ctx->f_servos) / sizeof(ctx->f_servos[0]);
+        size_t ia1 = 0, ia2 = sizeof(ctx->i_autoth) / sizeof(ctx->i_autoth[0]);
+        size_t fa1 = 0, fa2 = sizeof(ctx->f_autoth) / sizeof(ctx->f_autoth[0]);
+        while (autopilot_servos_on == 0 && ip1 < ip2 && NULL != ctx->i_servos[ip1])
+        {
+            if (XPLMGetDatai(ctx->i_servos[ip1]) > 0)
+            {
+                autopilot_servos_on = 1;
+                break;
+            }
+            ip1++; continue;
+        }
+        while (autopilot_servos_on == 0 && fp1 < fp2 && NULL != ctx->f_servos[fp1])
+        {
+            if (XPLMGetDataf(ctx->f_servos[fp1]) > 0.5f)
+            {
+                autopilot_servos_on = 1;
+                break;
+            }
+            fp1++; continue;
+        }
+        while (autothrottle_active == 0 && ia1 < ia2 && NULL != ctx->i_autoth[ia1])
+        {
+            if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
+            {
+                autothrottle_active = 1;
+                break;
+            }
+            ia1++; continue;
+        }
+        while (autothrottle_active == 0 && fa1 < fp2 && NULL != ctx->f_autoth[fa1])
+        {
+            if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
+            {
+                autothrottle_active = 1;
+                break;
+            }
+            fa1++; continue;
+        }
+
         /* throttle position readout (overlay) */
         float f_throttall = XPLMGetDataf(ctx->f_throttall), thra[2];
         // if (grndp->idle.thrott_array)
@@ -395,8 +468,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             ctx->last_throttle_all = f_throttall;
         }
         if (ctx->show_throttle_all < T_ZERO ||
-            // XPLMGetDatai(grndp->auto_t_sts)   || // fixme
-            ctx->ice_detect_positive)
+            ctx->ice_detect_positive ||
+            autothrottle_active)
         {
             ctx->throttle_did_change = 0;
             ctx->show_throttle_all = 0.0f;
@@ -465,31 +538,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             }
         }
 
-        /* check servos on/off */
-        ctx->autopilot_servos_on = 0;
-        size_t i1 = 0, j1 = sizeof(ctx->i_servos) / sizeof(ctx->i_servos[0]);
-        size_t i2 = 0, j2 = sizeof(ctx->f_servos) / sizeof(ctx->f_servos[0]);
-        while (ctx->autopilot_servos_on == 0 &&
-               i1 < j1 && NULL != ctx->i_servos[i1])
-        {
-            if (XPLMGetDatai(ctx->i_servos[i1]) > 0)
-            {
-                ctx->autopilot_servos_on = 1;
-                break;
-            }
-            i1++; continue;
-        }
-        while (ctx->autopilot_servos_on == 0 &&
-               i2 < j2 && NULL != ctx->f_servos[i2])
-        {
-            if (XPLMGetDataf(ctx->f_servos[i2]) > 0.5f)
-            {
-                ctx->autopilot_servos_on = 1;
-                break;
-            }
-            i2++; continue;
-        }
-        if (ctx->autopilot_servos_on)
+        /* variable nullzones */
+        if (autopilot_servos_on)
         {
             XPLMSetDataf(ctx->nullzone[0], 0.500f);
             XPLMSetDataf(ctx->nullzone[1], 0.500f);
