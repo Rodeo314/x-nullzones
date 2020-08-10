@@ -440,9 +440,9 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         if (ctx->use_320ultimate_api == -1)
         {
             XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->s);
-            if (ctx->s.DataVersion != NULL || ctx->s.DataAddUpdate != NULL)
+            if (ctx->s.DataVersion != NULL && ctx->s.DataAddUpdate != NULL)
             {
-                ctx->use_320ultimate_api = 1;//fixme
+                ctx->use_320ultimate_api = 1;
             }
         }
 
