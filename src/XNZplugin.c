@@ -470,23 +470,27 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             }
             fp1++; continue;
         }
-        while (autothrottle_active == 0 && ia1 < ia2 && NULL != ctx->i_autoth[ia1])
+        // Airbus A/T doesn't move levers, status not relevant for us
+        if (ctx->use_320ultimate_api <= 0 && ctx->f_thr_array == NULL)
         {
-            if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
+            while (autothrottle_active == 0 && ia1 < ia2 && NULL != ctx->i_autoth[ia1])
             {
-                autothrottle_active = 1;
-                break;
+                if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
+                {
+                    autothrottle_active = 1;
+                    break;
+                }
+                ia1++; continue;
             }
-            ia1++; continue;
-        }
-        while (autothrottle_active == 0 && fa1 < fa2 && NULL != ctx->f_autoth[fa1])
-        {
-            if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
+            while (autothrottle_active == 0 && fa1 < fa2 && NULL != ctx->f_autoth[fa1])
             {
-                autothrottle_active = 1;
-                break;
+                if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
+                {
+                    autothrottle_active = 1;
+                    break;
+                }
+                fa1++; continue;
             }
-            fa1++; continue;
         }
 
         /* throttle position readout (overlay) */
