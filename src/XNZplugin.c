@@ -46,6 +46,9 @@ typedef struct
     float prefs_nullzone[3];
     float minimum_null_zone;
     int autopilot_servos_on;
+    XPLMDataRef acf_roll_co;
+    XPLMDataRef ongroundany;
+    float nominal_roll_coef;
 }
 xnz_context;
 
@@ -140,6 +143,14 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_air_speed)\n"); goto fail;
     }
+    if (NULL == (global_context->acf_roll_co = XPLMFindDataRef("sim/aircraft/overflow/acf_roll_co")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (acf_roll_co)\n"); goto fail;
+    }
+    if (NULL == (global_context->ongroundany = XPLMFindDataRef("sim/flightmodel/failures/onground_any")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ongroundany)\n"); goto fail;
+    }
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
@@ -192,6 +203,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
                 global_context->minimum_null_zone = 0.025f;
+                global_context->nominal_roll_coef = XPLMGetDataf(global_context->acf_roll_co);
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
                 global_context->prefs_nullzone[1] = XPLMGetDataf(global_context->nullzone[1]);
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
@@ -216,6 +228,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
                 XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
                 XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
+                XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
                 return;
             }
             break;
@@ -224,6 +237,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
             XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
             XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
+            XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
             return;
 
         case XPLM_MSG_LIVERY_LOADED:
@@ -258,6 +272,19 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 #define AIRSPEED_MAX_KTS (62.500f)
 #define GROUNDSP_MIN_KTS (03.125f)
 #define GROUNDSP_MAX_KTS (31.250f)
+#define GROUNDSP_KTS_V00 (02.500f)
+#define GROUNDSP_KTS_V01 (26.250f)
+#define GROUNDSP_KTS_V02 (50.000f)
+#define ACF_ROLL_SET(_var, _gs, _base)                         \
+{   if (_gs <= GROUNDSP_KTS_V02)                               \
+    {                                                          \
+        _var  = ((_gs - GROUNDSP_KTS_V00) / 950.0f) + _base;   \
+    }                                                          \
+    if (_gs >= GROUNDSP_KTS_V01)                               \
+    {                                                          \
+        _var -= ((_gs - GROUNDSP_KTS_V01) / 475.0f);           \
+    }                                                          \
+}
 static float callback_hdlr(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
                            int   inCounter,
@@ -266,6 +293,19 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     if (inRefcon)
     {
         xnz_context *ctx = inRefcon;
+        float airspeed = XPLMGetDataf(ctx->f_air_speed);
+        float groundsp = MPS2KTS(XPLMGetDataf(ctx->f_grd_speed));
+
+        /* X-Plane 10: update ground roll friction coefficient as required */
+        if (ctx->i_version_simulator < 11000)
+        {
+            if (XPLMGetDatai(ctx->ongroundany) && groundsp > GROUNDSP_KTS_V00 && groundsp < GROUNDSP_KTS_V02)
+            {
+                float arc; ACF_ROLL_SET(arc, groundsp, ctx->nominal_roll_coef);
+                XPLMSetDataf(ctx->acf_roll_co, arc);
+            }
+            XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
+        }
 
         /* check servos on/off */
         ctx->autopilot_servos_on = 0;
@@ -299,8 +339,6 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
         else
         {
-            float airspeed = XPLMGetDataf(ctx->f_air_speed);
-            float groundsp = MPS2KTS(XPLMGetDataf(ctx->f_grd_speed));
             if (airspeed > AIRSPEED_MAX_KTS)
             {
                 airspeed = AIRSPEED_MAX_KTS;
@@ -332,6 +370,10 @@ static float callback_hdlr(float inElapsedSinceLastCall,
 #undef AIRSPEED_MAX_KTS
 #undef GROUNDSP_MIN_KTS
 #undef GROUNDSP_MAX_KTS
+#undef GROUNDSP_KTS_V00
+#undef GROUNDSP_KTS_V01
+#undef GROUNDSP_KTS_V02
+#undef ACF_ROLL_SET
 
 static int xnz_log(const char *format, ...)
 {
@@ -348,5 +390,5 @@ static int xnz_log(const char *format, ...)
     return ret;
 }
 
-#undef MPS2KTS
 #undef YAW_NZ_FACTR
+#undef MPS2KTS
