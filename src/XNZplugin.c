@@ -65,6 +65,8 @@ typedef struct
     float nominal_roll_coef;
     int use_320ultimate_api;
     SharedValuesInterface s;
+    int id_f32_eng_lever_lt;
+    int id_f32_eng_lever_rt;
     XPLMDataRef f_thr_array;
     XPLMDataRef f_throttall;
     float last_throttle_all;
@@ -423,6 +425,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     if (inRefcon)
     {
         xnz_context *ctx = inRefcon;
+        float f_throttall, array[2];
         float airspeed = XPLMGetDataf(ctx->f_air_speed);
         float groundsp = MPS2KTS(XPLMGetDataf(ctx->f_grd_speed));
 
@@ -442,7 +445,12 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->s);
             if (ctx->s.DataVersion != NULL && ctx->s.DataAddUpdate != NULL)
             {
-                ctx->use_320ultimate_api = 1;
+                ctx->id_f32_eng_lever_lt = ctx->s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever1");
+                ctx->id_f32_eng_lever_rt = ctx->s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever2");
+                if (ctx->id_f32_eng_lever_lt > -1 && ctx->id_f32_eng_lever_rt > -1)
+                {
+                    ctx->use_320ultimate_api = 1;
+                }
             }
         }
 
@@ -493,24 +501,26 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             }
         }
 
-        /* throttle position readout (overlay) */
-        float f_throttall = XPLMGetDataf(ctx->f_throttall), thra[2];
-        // if (grndp->idle.thrott_array)
-        // {
-        //     XPLMGetDatavf(grndp->idle.thrott_array, thra, 0, 2);
-        //     f_throttall = (((((thra[0] + thra[1]) / 2.0f))));
-        // }
-        // else if (assrt)
-        // {
-        //     // Aircraft.Cockpit.Pedestal.EngineLever1: 0-20-65 (rev-idle-max)
-        //     assrt->api.ValueGet(assrt->dat.id_f32_p_engines_lever1, &thra[0]);
-        //     assrt->api.ValueGet(assrt->dat.id_f32_p_engines_lever1, &thra[1]);
-        //     if ((f_throttall = (((thra[0] + thra[1]) / 2.0f) - 20.0f) / 45.0f) < 0.0f)
-        //     {
-        //         (f_throttall = (((thra[0] + thra[1]) / 2.0f) - 20.0f) / 20.0f);
-        //     }
-        // }
-        // […]
+        /* throttle readout (overlay) */
+        if (ctx->use_320ultimate_api > 0)
+        {
+            // Pedestal.EngineLever*: 0-20-65 (reverse-idle-max)
+            ctx->s.ValueGet(ctx->id_f32_eng_lever_lt, &array[0]);
+            ctx->s.ValueGet(ctx->id_f32_eng_lever_rt, &array[1]);
+            if ((f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 45.0f) < 0.0f)
+            {
+                (f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 20.0f);
+            }
+        }
+        else if (ctx->f_thr_array != NULL)
+        {
+            XPLMGetDatavf(ctx->f_thr_array, array, 0, 2);
+            f_throttall = ((array[0] + array[1]) / 2.0f);
+        }
+        else
+        {
+            f_throttall = XPLMGetDataf(ctx->f_throttall);
+        }
         if (fabsf(ctx->last_throttle_all - f_throttall) > 0.02f) // 2.0%
         {
             ctx->throttle_did_change = 1;
