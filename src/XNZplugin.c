@@ -42,8 +42,27 @@
 #pragma clang diagnostic pop
 #endif
 
+#define T_ZERO                   (00.001f)
+#define AIRSPEED_MIN_KTS         (50.000f)
+#define AIRSPEED_MAX_KTS         (62.500f)
+#define GROUNDSP_MIN_KTS         (03.125f)
+#define GROUNDSP_MAX_KTS         (31.250f)
+#define GROUNDSP_KTS_MIN         (02.500f)
+#define GROUNDSP_KTS_MID         (26.250f)
+#define GROUNDSP_KTS_MAX         (50.000f)
 #define MPS2KTS(MPS) (MPS * 3.6f / 1.852f)
-#define YAW_NZ_FACTR (2.0f)
+#define ACF_ROLL_SET(_var, _gs, _base)                         \
+{                                                              \
+    if (_gs > GROUNDSP_KTS_MID)                                \
+    {                                                          \
+        _var  = ((_gs - GROUNDSP_KTS_MIN) / 950.0f) + _base;   \
+        _var -= ((_gs - GROUNDSP_KTS_MID) / 475.0f);           \
+    }                                                          \
+    else                                                       \
+    {                                                          \
+        _var  = ((_gs - GROUNDSP_KTS_MIN) / 950.0f) + _base;   \
+    }                                                          \
+}
 
 typedef struct
 {
@@ -317,19 +336,21 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_PLANE_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
-                global_context->minimum_null_zone = 0.025f;
+                global_context->minimum_null_zone = 0.04f; // hardcoded for now
                 global_context->nominal_roll_coef = XPLMGetDataf(global_context->acf_roll_co);
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
                 global_context->prefs_nullzone[1] = XPLMGetDataf(global_context->nullzone[1]);
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
-                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[0]);
-                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[1]);
-                global_context->minimum_null_zone = fmaxf(global_context->minimum_null_zone, global_context->prefs_nullzone[2] / YAW_NZ_FACTR);
-                xnz_log("x-nullzones: new aircraft: initial nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
+                float rc0; ACF_ROLL_SET(rc0, GROUNDSP_KTS_MIN, global_context->nominal_roll_coef);
+                float rc1; ACF_ROLL_SET(rc1, GROUNDSP_KTS_MID, global_context->nominal_roll_coef);
+                float rc2; ACF_ROLL_SET(rc2, GROUNDSP_KTS_MAX, global_context->nominal_roll_coef);
+                xnz_log("x-nullzones: new aircraft: original nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
                         global_context->prefs_nullzone[0],
                         global_context->prefs_nullzone[1],
                         global_context->prefs_nullzone[2],
                         global_context->minimum_null_zone);
+                xnz_log("x-nullzones: new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
+                        global_context->nominal_roll_coef, rc0, rc1, rc2);
                 return;
             }
             break;
@@ -399,24 +420,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
-#define T_ZERO           (00.001f)
-#define AIRSPEED_MIN_KTS (50.000f)
-#define AIRSPEED_MAX_KTS (62.500f)
-#define GROUNDSP_MIN_KTS (03.125f)
-#define GROUNDSP_MAX_KTS (31.250f)
-#define GROUNDSP_KTS_V00 (02.500f)
-#define GROUNDSP_KTS_V01 (26.250f)
-#define GROUNDSP_KTS_V02 (50.000f)
-#define ACF_ROLL_SET(_var, _gs, _base)                         \
-{   if (_gs <= GROUNDSP_KTS_V02)                               \
-    {                                                          \
-        _var  = ((_gs - GROUNDSP_KTS_V00) / 950.0f) + _base;   \
-    }                                                          \
-    if (_gs >= GROUNDSP_KTS_V01)                               \
-    {                                                          \
-        _var -= ((_gs - GROUNDSP_KTS_V01) / 475.0f);           \
-    }                                                          \
-}
 static float callback_hdlr(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
                            int   inCounter,
@@ -432,7 +435,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         /* X-Plane 10: update ground roll friction coefficient as required */
         if (ctx->i_version_simulator < 11000)
         {
-            if (XPLMGetDatai(ctx->ongroundany) && groundsp > GROUNDSP_KTS_V00 && groundsp < GROUNDSP_KTS_V02)
+            if (XPLMGetDatai(ctx->ongroundany) && groundsp > GROUNDSP_KTS_MIN && groundsp < GROUNDSP_KTS_MAX)
             {
                 float arc; ACF_ROLL_SET(arc, groundsp, ctx->nominal_roll_coef);
                 XPLMSetDataf(ctx->acf_roll_co, arc);
@@ -577,8 +580,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                 XPShowWidget(ctx->widgetid[1]);
             }
         }
-        else if (groundsp > GROUNDSP_KTS_V00 &&
-                 groundsp < GROUNDSP_KTS_V02 &&
+        else if (groundsp > GROUNDSP_KTS_MIN &&
+                 groundsp < GROUNDSP_KTS_MAX &&
                  XPLMGetDatai(ctx->ongroundany))
         {
             snprintf(ctx->overlay_textbuf, 9, "%2.0f kts", groundsp);
@@ -623,8 +626,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             {
                 groundsp = GROUNDSP_MIN_KTS;
             }
-            float nullzone_pitch_roll =         1.0f * 0.125f - ((0.125f - ctx->minimum_null_zone) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
-            float nullzone_yaw_tiller = YAW_NZ_FACTR * 0.125f - ((0.125f - ctx->minimum_null_zone) * ((groundsp - GROUNDSP_MIN_KTS) / (GROUNDSP_MAX_KTS - GROUNDSP_MIN_KTS)));
+            float nullzone_pitch_roll = 0.125f - ((0.125f - ctx->minimum_null_zone) * ((airspeed - AIRSPEED_MIN_KTS) / (AIRSPEED_MAX_KTS - AIRSPEED_MIN_KTS)));
+            float nullzone_yaw_tiller = 0.250f - ((0.250f - ctx->minimum_null_zone) * ((groundsp - GROUNDSP_MIN_KTS) / (GROUNDSP_MAX_KTS - GROUNDSP_MIN_KTS)));
             XPLMSetDataf(ctx->nullzone[0], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[2], nullzone_yaw_tiller);
@@ -635,15 +638,6 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
     return 0;
 }
-#undef AIRSPEED_MIN_KTS
-#undef AIRSPEED_MAX_KTS
-#undef GROUNDSP_MIN_KTS
-#undef GROUNDSP_MAX_KTS
-#undef GROUNDSP_KTS_V00
-#undef GROUNDSP_KTS_V01
-#undef GROUNDSP_KTS_V02
-#undef ACF_ROLL_SET
-#undef T_ZERO
 
 static int xnz_log(const char *format, ...)
 {
@@ -660,5 +654,13 @@ static int xnz_log(const char *format, ...)
     return ret;
 }
 
-#undef YAW_NZ_FACTR
+#undef AIRSPEED_MIN_KTS
+#undef AIRSPEED_MAX_KTS
+#undef GROUNDSP_MIN_KTS
+#undef GROUNDSP_MAX_KTS
+#undef GROUNDSP_KTS_MIN
+#undef GROUNDSP_KTS_MID
+#undef GROUNDSP_KTS_MAX
+#undef ACF_ROLL_SET
 #undef MPS2KTS
+#undef T_ZERO
