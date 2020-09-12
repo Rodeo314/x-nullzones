@@ -341,16 +341,19 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
                 global_context->prefs_nullzone[1] = XPLMGetDataf(global_context->nullzone[1]);
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
-                float rc0; ACF_ROLL_SET(rc0, GROUNDSP_KTS_MIN, global_context->nominal_roll_coef);
-                float rc1; ACF_ROLL_SET(rc1, GROUNDSP_KTS_MID, global_context->nominal_roll_coef);
-                float rc2; ACF_ROLL_SET(rc2, GROUNDSP_KTS_MAX, global_context->nominal_roll_coef);
                 xnz_log("x-nullzones: new aircraft: original nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
                         global_context->prefs_nullzone[0],
                         global_context->prefs_nullzone[1],
                         global_context->prefs_nullzone[2],
                         global_context->minimum_null_zone);
-                xnz_log("x-nullzones: new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
-                        global_context->nominal_roll_coef, rc0, rc1, rc2);
+                if (global_context->i_version_simulator < 11000)
+                {
+                    float rc0; ACF_ROLL_SET(rc0, GROUNDSP_KTS_MIN, global_context->nominal_roll_coef);
+                    float rc1; ACF_ROLL_SET(rc1, GROUNDSP_KTS_MID, global_context->nominal_roll_coef);
+                    float rc2; ACF_ROLL_SET(rc2, GROUNDSP_KTS_MAX, global_context->nominal_roll_coef);
+                    xnz_log("x-nullzones: new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
+                            global_context->nominal_roll_coef, rc0, rc1, rc2);
+                }
                 return;
             }
             break;
