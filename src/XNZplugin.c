@@ -234,7 +234,7 @@ PLUGIN_API int XPluginEnable(void)
     XPSetWidgetProperty(global_context->widgetid[0], xpProperty_MainWindowType, xpMainWindowStyle_Translucent);
     XPSetWidgetProperty(global_context->widgetid[1], xpProperty_CaptionLit, 1);
     XPSetWidgetGeometry(global_context->widgetid[0], 00, 56, 64, 00);
-    XPSetWidgetGeometry(global_context->widgetid[1], 12, 46, 56, 10);
+    XPSetWidgetGeometry(global_context->widgetid[1], 10, 46, 54, 10);
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
