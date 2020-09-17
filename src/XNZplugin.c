@@ -91,7 +91,7 @@ typedef struct
     float last_throttle_all;
     float show_throttle_all;
     float icecheck_required;
-    char overlay_textbuf[9];
+    char overly_txt_buf[10];
     int throttle_did_change;
     int ice_detect_positive;
     XPLMDataRef f_ice_rf[4];
@@ -527,7 +527,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             f_throttall = XPLMGetDataf(ctx->f_throttall);
         }
-        if (fabsf(ctx->last_throttle_all - f_throttall) > 0.02f) // 2.0%
+        if (fabsf(ctx->last_throttle_all - f_throttall) >= 0.0025f)
         {
             ctx->throttle_did_change = 1;
             ctx->show_throttle_all = 3.0f;
@@ -574,8 +574,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             if (ctx->throttle_did_change)
             {
-                snprintf(ctx->overlay_textbuf, 9, "%5.3f", f_throttall);
-                XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overlay_textbuf);
+                snprintf(ctx->overly_txt_buf, 10, "%5.4f", f_throttall);
+                XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overly_txt_buf);
             }
             if (XPIsWidgetVisible(ctx->widgetid[1]) == 0)
             {
@@ -587,8 +587,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                  groundsp < GROUNDSP_KTS_MAX &&
                  XPLMGetDatai(ctx->ongroundany))
         {
-            snprintf(ctx->overlay_textbuf, 9, "%2.0f kts", groundsp);
-            XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overlay_textbuf);
+            snprintf(ctx->overly_txt_buf, 9, "%2.0f kts", groundsp);
+            XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overly_txt_buf);
             if (XPIsWidgetVisible(ctx->widgetid[1]) == 0)
             {
                 XPShowWidget(ctx->widgetid[0]);
