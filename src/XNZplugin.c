@@ -112,7 +112,7 @@ static const char *f_servo_dataref_names[] =
 
 static const char *i_autot_dataref_names[] =
 {
-    "sim/cockpit2/autopilot/autothrottle_enabled",
+    "sim/cockpit2/autopilot/autothrottle_on", // int n boolean Auto-throttle really working? Takes into account failures, esys, etc.
     NULL,
 };
 
