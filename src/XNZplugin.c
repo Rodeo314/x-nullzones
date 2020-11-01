@@ -96,7 +96,7 @@ typedef struct
     float last_throttle_all;
     float show_throttle_all;
     float icecheck_required;
-    char overly_txt_buf[10];
+    char overly_txt_buf[11];
     int throttle_did_change;
     int ice_detect_positive;
     XPLMDataRef f_ice_rf[4];
@@ -257,8 +257,8 @@ PLUGIN_API int XPluginEnable(void)
     }
     XPSetWidgetProperty(global_context->widgetid[0], xpProperty_MainWindowType, xpMainWindowStyle_Translucent);
     XPSetWidgetProperty(global_context->widgetid[1], xpProperty_CaptionLit, 1);
-    XPSetWidgetGeometry(global_context->widgetid[0], 00, 56, 64, 00);
-    XPSetWidgetGeometry(global_context->widgetid[1], 10, 46, 54, 10);
+    XPSetWidgetGeometry(global_context->widgetid[0], 0, 56, 64, 0);
+    XPSetWidgetGeometry(global_context->widgetid[1], 7, 49, 57, 7);
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
@@ -704,7 +704,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             if (ctx->throttle_did_change)
             {
-                snprintf(ctx->overly_txt_buf, 10, "%5.4f", f_throttall);
+                snprintf(ctx->overly_txt_buf, 11, "%7.5f", f_throttall);
                 XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overly_txt_buf);
             }
             if (XPIsWidgetVisible(ctx->widgetid[1]) == 0)
