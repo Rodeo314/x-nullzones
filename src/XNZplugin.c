@@ -42,6 +42,11 @@
 #pragma clang diagnostic pop
 #endif
 
+#define TCA_IDLE_CTR (0.28f)
+#define TCA_CLMB_CTR (0.52f)
+#define TCA_FLEX_CTR (0.72f)
+#define TCA_DEADBAND (0.04f)
+
 #define T_ZERO                   (00.001f)
 #define AIRSPEED_MIN_KTS         (50.000f)
 #define AIRSPEED_MAX_KTS         (62.500f)
@@ -96,6 +101,23 @@ typedef struct
     int ice_detect_positive;
     XPLMDataRef f_ice_rf[4];
     XPWidgetID  widgetid[2];
+
+    XPLMFlightLoop_f f_l_th;
+    XPLMDataRef i_stick_ass;
+    XPLMDataRef f_stick_val;
+    XPLMDataRef f_thr_gener;
+    XPLMDataRef f_thr_tolis;
+    XPLMDataRef i_prop_mode;
+    XPLMDataRef i_ngine_num;
+    XPLMDataRef i_ngine_typ;
+    XPLMCommandRef rev_togg;
+    XPLMCommandRef rev_tog1;
+    XPLMCommandRef rev_tog2;
+    int i_propmode_value[2];
+    int id_propeller_axis_3;
+    int asymmetrical_thrust;
+    // TODO: CL300: detents
+    // TODO: disab. command
 }
 xnz_context;
 
@@ -125,6 +147,8 @@ xnz_context *global_context = NULL;
 
 static   int xnz_log       (const char *format, ...);
 static float callback_hdlr(float, float, int, void*);
+static float throttle_hdlr(float, float, int, void*);
+static inline float throttle_mapping(float rawvalue);
 
 #if IBM
 #include <windows.h>
@@ -245,6 +269,46 @@ PLUGIN_API int XPluginEnable(void)
     memset(global_context->i_autoth, (int)NULL, sizeof(global_context->i_autoth));
     memset(global_context->f_autoth, (int)NULL, sizeof(global_context->f_autoth));
 
+    /* TCA thrust quadrant support */
+    if (NULL == (global_context->i_stick_ass = XPLMFindDataRef("sim/joystick/joystick_axis_assignments")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (i_stick_ass)\n"); goto fail;
+    }
+    if (NULL == (global_context->f_stick_val = XPLMFindDataRef("sim/joystick/joystick_axis_values")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_stick_val)\n"); goto fail;
+    }
+    if (NULL == (global_context->f_thr_gener = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_thr_array)\n"); goto fail;
+    }
+    if (NULL == (global_context->i_prop_mode = XPLMFindDataRef("sim/cockpit2/engine/actuators/prop_mode")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (i_prop_mode)\n"); goto fail;
+    }
+    if (NULL == (global_context->i_ngine_num = XPLMFindDataRef("sim/aircraft/engine/acf_num_engines")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (i_ngine_num)\n"); goto fail;
+    }
+    if (NULL == (global_context->i_ngine_typ = XPLMFindDataRef("sim/aircraft/prop/acf_en_type")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (i_ngine_typ)\n"); goto fail;
+    }
+    if (NULL == (global_context->rev_togg = XPLMFindCommand("sim/engines/thrust_reverse_toggle")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (rev_togg)\n"); goto fail;
+    }
+    if (NULL == (global_context->rev_tog1 = XPLMFindCommand("sim/engines/thrust_reverse_toggle_1")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (rev_tog1)\n"); goto fail;
+    }
+    if (NULL == (global_context->rev_tog2 = XPLMFindCommand("sim/engines/thrust_reverse_toggle_2")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (rev_tog2)\n"); goto fail;
+    }
+    XPLMRegisterFlightLoopCallback((global_context->f_l_th = &throttle_hdlr), 0, global_context);
+    global_context->id_propeller_axis_3 = -1;
+
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     global_context->i_version_simulator = outXPlaneVersion;
@@ -265,10 +329,40 @@ fail:
     return 0;
 }
 
+static void xnz_context_reset(xnz_context *ctx)
+{
+    if (ctx)
+    {
+        // TODO: re-assign axes when there are 3 or more turbo/propeller engines
+        XPLMSetFlightLoopCallbackInterval(ctx->f_l_cb, 0, 1, ctx);
+        XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
+        memset(ctx->f_servos, (int)NULL, sizeof(ctx->f_servos));
+        memset(ctx->i_servos, (int)NULL, sizeof(ctx->i_servos));
+        memset(ctx->i_autoth, (int)NULL, sizeof(ctx->i_autoth));
+        memset(ctx->f_autoth, (int)NULL, sizeof(ctx->f_autoth));
+        XPLMSetDataf(ctx->nullzone[0], ctx->prefs_nullzone[0]);
+        XPLMSetDataf(ctx->nullzone[1], ctx->prefs_nullzone[1]);
+        XPLMSetDataf(ctx->nullzone[2], ctx->prefs_nullzone[2]);
+        XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
+        if (XPIsWidgetVisible(ctx->widgetid[1]) != 0)
+        {
+            XPHideWidget(ctx->widgetid[0]);
+            XPHideWidget(ctx->widgetid[1]);
+        }
+        ctx->i_context_init_done = 0;
+        ctx->use_320ultimate_api = 0;
+        ctx->f_thr_array = NULL;
+    }
+}
+
 PLUGIN_API void XPluginDisable(void)
 {
+    /* cleanup */
+    xnz_context_reset(global_context);
+
     /* flight loop callback */
     XPLMUnregisterFlightLoopCallback(global_context->f_l_cb, global_context);
+    XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
 
     /* reset nullzones to default/preferences values */
     XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
@@ -312,24 +406,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_PLANE_UNLOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
-                XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 0, 1, global_context);
-                memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
-                memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
-                memset(global_context->i_autoth, (int)NULL, sizeof(global_context->i_autoth));
-                memset(global_context->f_autoth, (int)NULL, sizeof(global_context->f_autoth));
-                XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
-                XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
-                XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
-                XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
-                if (XPIsWidgetVisible(global_context->widgetid[1]) != 0)
-                {
-                    XPHideWidget(global_context->widgetid[0]);
-                    XPHideWidget(global_context->widgetid[1]);
-                }
-                global_context->i_context_init_done = 0;
-                global_context->use_320ultimate_api = 0;
-                global_context->f_thr_array = NULL;
-                return;
+                return xnz_context_reset(global_context);
             }
             break;
 
@@ -406,6 +483,58 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.6++
                 {
                     global_context->f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input");
+                }
+
+                /* TCA thrust quadrant support */
+                if (global_context->id_propeller_axis_3 < 0)
+                {
+                    size_t size = global_context->i_version_simulator < 11000 ? 100 : 500;
+                    for (size_t i = 0; i < size - 1; i++)
+                    {
+                        int i_stick_ass[2]; XPLMGetDatavi(global_context->i_stick_ass, i_stick_ass, i, 2);
+                        if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27)
+                        {
+                            xnz_log("x-nullzones: found prop 3/4 axes at index "
+                                    "(%02zd, %02zd) with assignment (%02d, %02d)\n",
+                                    i, i + 1, i_stick_ass[0], i_stick_ass[1]);
+                            global_context->id_propeller_axis_3 = i;
+                            break;
+                        }
+                    }
+                    if (global_context->id_propeller_axis_3 >= 0 && 0 /* debug */)
+                    {
+                        for (float f = 0.0f, last = -2.0f; f <= 1.0f; f += 0.005f)
+                        {
+                            float next = throttle_mapping(f);
+                            if (next < last)
+                            {
+                                xnz_log("x-nullzones [debug]: non-monotonically increasing throttle mapping, %.4f -> %.4f\n", last, next);
+                                exit(-1);
+                            }
+                            xnz_log("x-nullzones [debug]: throttle_mapping(%.3f) = %.4f\n", f, (last = next));
+                        }
+                    }
+                }
+                if (global_context->id_propeller_axis_3 >= 0)
+                {
+                    int acf_en_type[3], acf_en_num = XPLMGetDatai(global_context->i_ngine_num);
+                    if (acf_en_num >= 2) // some Carenado have extra engine 4 special effects
+                    {
+                        if (acf_en_num > 3)
+                        {
+                            acf_en_num = 3; // whether we have at least 3 engines of same type
+                        }
+                        XPLMGetDatavi(global_context->i_ngine_typ, acf_en_type, 0, acf_en_num);
+                        int dummy = acf_en_type[acf_en_num - 1] != acf_en_type[acf_en_num - 2];
+                        global_context->asymmetrical_thrust = !(((2 != (acf_en_num - dummy))));
+                        // TODO: unassign axes when there are 3 or more turbo/propeller engines
+                    }
+                    else
+                    {
+                        global_context->asymmetrical_thrust = 0;
+                    }
+                    global_context->f_thr_tolis = global_context->f_thr_array;
+                    XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
                 }
 
                 // init data, start flightloop callback
@@ -643,6 +772,200 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     return 0;
 }
 
+static inline float throttle_mapping_toliss(float rawvalue)
+{
+    if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
+    {
+        if (rawvalue < TCA_DEADBAND)
+        {
+            return -1.0f;
+        }
+        float extent = (TCA_IDLE_CTR - TCA_DEADBAND) - TCA_DEADBAND;
+        float tomaxr = extent - (rawvalue - TCA_DEADBAND);
+        return (-0.1f - (0.9f * (tomaxr / extent)));
+    }
+    if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
+    {
+        return 1.00f; // TOGA
+    }
+    if (rawvalue > (TCA_CLMB_CTR + 0.5f * (TCA_FLEX_CTR - TCA_CLMB_CTR)))
+    {
+        return 0.87f; // FLEX
+    }
+    if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
+    {
+        return 0.69f; // CLB
+    }
+    if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
+    {
+        float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
+        float toidle = rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND);
+        return 0.68f * (toidle / extent);
+    }
+    return 0.0f; // default to forward idle
+}
+
+/* ******* Example: mappings ******* *
+ *************************************
+ ** IDLE *** CLMB *** FLEX *** TOGA **
+ *************************************
+ * 0.000f | linear | 0.750f | 1.000f *
+ * 0.000f | 0.700f | linear | 1.000f *
+ * 0.000f | 0.750f | linear | 1.000f *
+ * 0.000f | linear | 0.875f | 1.000f * <------
+ *************************************
+ */
+static inline float throttle_mapping(float rawvalue)
+{
+#if 0
+    return throttle_mapping_toliss(rawvalue); // debug
+#endif
+    if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
+    {
+        if (rawvalue < TCA_DEADBAND)
+        {
+            return -1.0f;
+        }
+        float extent = (TCA_IDLE_CTR - TCA_DEADBAND) - TCA_DEADBAND;
+        float tomaxr = extent - (rawvalue - TCA_DEADBAND);
+        return (-0.1f - (0.9f * (tomaxr / extent)));
+    }
+    if (rawvalue > (1.0f - TCA_DEADBAND))
+    {
+        return 1.0f;
+    }
+    if (rawvalue >= TCA_FLEX_CTR)
+    {
+        float toflex = rawvalue - TCA_FLEX_CTR;
+        float extent = (1.0f - TCA_DEADBAND) - TCA_FLEX_CTR;
+        return 0.875f + ((1.0f - 0.875f) * (toflex / extent));
+    }
+    if (rawvalue >= (TCA_IDLE_CTR + TCA_DEADBAND))
+    {
+        float extent = TCA_FLEX_CTR - (TCA_IDLE_CTR + TCA_DEADBAND);
+        float toidle = rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND);
+        return 0.875f * (toidle / extent);
+    }
+    return 0.0f; // default to forward idle
+}
+
+static float throttle_hdlr(float inElapsedSinceLastCall,
+                           float inElapsedTimeSinceLastFlightLoop,
+                           int   inCounter,
+                           void *inRefcon)
+{
+    if (inRefcon)
+    {
+        float f_stick_val[2];
+        xnz_context *ctx = inRefcon;
+        int symmetrical_thrust = !ctx->asymmetrical_thrust;
+
+        /* check autothrust status */
+        if (ctx->f_thr_tolis == NULL && ctx->use_320ultimate_api < 1)
+        {   // Airbus A/T doesn't move levers, status not relevant for us
+            size_t ia1 = 0, ia2 = sizeof(ctx->i_autoth) / sizeof(ctx->i_autoth[0]);
+            size_t fa1 = 0, fa2 = sizeof(ctx->f_autoth) / sizeof(ctx->f_autoth[0]);
+            while (ia1 < ia2 && NULL != ctx->i_autoth[ia1])
+            {
+                if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
+                {
+                    return (1.0f / 16.0f);
+                }
+                ia1++; continue;
+            }
+            while (fa1 < fa2 && NULL != ctx->f_autoth[fa1])
+            {
+                if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
+                {
+                    return (1.0f / 16.0f);
+                }
+                fa1++; continue;
+            }
+        }
+        XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->id_propeller_axis_3, 2);
+        if (fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_DEADBAND)
+        {
+            symmetrical_thrust = 1;
+        }
+        if (symmetrical_thrust)
+        {
+            float addition = f_stick_val[0] + f_stick_val[1];
+            f_stick_val[0] = addition / 2.0f;
+            f_stick_val[1] = f_stick_val[0];
+        }
+        if (ctx->use_320ultimate_api > 0)
+        {
+            return (1.0f / 16.0f); // TODO: implement
+        }
+        if (ctx->f_thr_tolis)
+        {
+            // note: A350 reverse thrust only works with X-Plane 11 (v1.6+)…
+            f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0]);
+            f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1]);
+            XPLMSetDatavf(ctx->f_thr_tolis, f_stick_val, 0, 2);
+            return (1.0f / 16.0f);
+        }
+        if (symmetrical_thrust)
+        {
+            XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 1);
+            f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
+            if (f_stick_val[0] < 0.0f)
+            {
+                if (ctx->i_propmode_value[0] < 3)
+                {
+                    XPLMCommandOnce(ctx->rev_togg);
+                }
+            }
+            else
+            {
+                if (ctx->i_propmode_value[0] > 1)
+                {
+                    XPLMCommandOnce(ctx->rev_togg);
+                }
+            }
+            XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
+            return (1.0f / 16.0f);
+        }
+        XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
+        f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
+        f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1]);
+        if (f_stick_val[0] < 0.0f)
+        {
+            if (ctx->i_propmode_value[0] < 3)
+            {
+                XPLMCommandOnce(ctx->rev_tog1);
+            }
+        }
+        else
+        {
+            if (ctx->i_propmode_value[0] > 1)
+            {
+                XPLMCommandOnce(ctx->rev_tog1);
+            }
+        }
+        if (f_stick_val[1] < 0.0f)
+        {
+            if (ctx->i_propmode_value[1] < 3)
+            {
+                XPLMCommandOnce(ctx->rev_tog2);
+            }
+        }
+        else
+        {
+            if (ctx->i_propmode_value[1] > 1)
+            {
+                XPLMCommandOnce(ctx->rev_tog2);
+            }
+        }
+        f_stick_val[0] = fabsf(f_stick_val[0]);
+        f_stick_val[1] = fabsf(f_stick_val[1]);
+        XPLMSetDatavf(ctx->f_thr_gener, f_stick_val, 0, 2);
+        return (1.0f / 16.0f);
+    }
+    XPLMDebugString("x-nullzones [error]: throttle_hdlr: inRefcon == NULL, disabling callback");
+    return 0;
+}
+
 static int xnz_log(const char *format, ...)
 {
     int ret;
@@ -657,6 +980,11 @@ static int xnz_log(const char *format, ...)
     va_end(ap);
     return ret;
 }
+
+#undef TCA_IDLE_CTR
+#undef TCA_CLMB_CTR
+#undef TCA_FLEX_CTR
+#undef TCA_DEADBAND
 
 #undef AIRSPEED_MIN_KTS
 #undef AIRSPEED_MAX_KTS
