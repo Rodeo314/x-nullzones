@@ -101,7 +101,7 @@ xnz_context;
 
 static const char *i_servo_dataref_names[] =
 {
-    "sim/cockpit2/autopilot/servos_on",
+    "sim/cockpit2/autopilot/servos_on", // int n boolean Are the servos on? Takes into account FD mode and control-wheel-steering, failures, etc.
     NULL,
 };
 
