@@ -116,7 +116,7 @@ typedef struct
     int i_propmode_value[2];
     int id_propeller_axis_3;
     int asymmetrical_thrust;
-    // TODO: CL300: detents
+    int ddenn_cl300_detents;
     // TODO: disab. command
 }
 xnz_context;
@@ -351,6 +351,7 @@ static void xnz_context_reset(xnz_context *ctx)
         }
         ctx->i_context_init_done = 0;
         ctx->use_320ultimate_api = 0;
+        ctx->ddenn_cl300_detents = 0;
         ctx->f_thr_array = NULL;
     }
 }
@@ -390,6 +391,22 @@ PLUGIN_API void XPluginDisable(void)
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginDisable OK\n");
+}
+
+static inline void dref_read_str(XPLMDataRef ref, char *buf, size_t siz)
+{
+    if (ref && buf && siz)
+    {
+        int len = XPLMGetDatab(ref, buf, 0, siz - 1);
+        if (len > 0)
+        {
+            buf[siz - 1] = '\0';
+            return;
+        }
+        buf[0] = '\0';
+        return;
+    }
+    return;
 }
 
 PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, void *inParam)
@@ -483,6 +500,27 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.6++
                 {
                     global_context->f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input");
+                }
+                else if (XPLM_NO_PLUGIN_ID != XPLMFindPluginBySignature("1-sim.sasl"))
+                {
+                    XPLMDataRef ref = NULL; char auth[501], desc[261], icao[41];
+                    if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_author")))
+                    {
+                        dref_read_str(ref, auth, sizeof(auth));
+                        if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_descrip")))
+                        {
+                            dref_read_str(ref, desc, sizeof(desc));
+                            if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_ICAO")))
+                            {
+                                dref_read_str(ref, icao, sizeof(icao));
+                                if (!strncasecmp(auth, "Denis 'ddenn' Krupin", strlen("Denis 'ddenn' Krupin")) &&
+                                    !strncasecmp(desc, "Bombardier Challenger 300", strlen("Bombardier Challenger 300")))
+                                {
+                                    global_context->ddenn_cl300_detents = 1;
+                                }
+                            }
+                        }
+                    }
                 }
 
                 /* TCA thrust quadrant support */
@@ -772,6 +810,39 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     return 0;
 }
 
+static inline float throttle_mapping_ddcl30(float rawvalue)
+{
+    if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
+    {
+        if (rawvalue < TCA_DEADBAND)
+        {
+            return -1.0f;
+        }
+        float extent = (TCA_IDLE_CTR - TCA_DEADBAND) - TCA_DEADBAND;
+        float tomaxr = extent - (rawvalue - TCA_DEADBAND);
+        return (-0.1f - (0.9f * (tomaxr / extent)));
+    }
+    if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
+    {
+        return 1.0f; // APR
+    }
+    if (rawvalue > (TCA_CLMB_CTR + 0.5f * (TCA_FLEX_CTR - TCA_CLMB_CTR)))
+    {
+        return 2.8f / 3.0f; // TO
+    }
+    if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
+    {
+        return 2.6f / 3.0f; // CLB
+    }
+    if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
+    {
+        float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
+        float toidle = rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND);
+        return 2.5f / 3.0f * (toidle / extent);
+    }
+    return 0.0f; // default to forward idle
+}
+
 static inline float throttle_mapping_toliss(float rawvalue)
 {
     if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
@@ -908,7 +979,14 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         if (symmetrical_thrust)
         {
             XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 1);
-            f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
+            if (ctx->ddenn_cl300_detents)
+            {
+                f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0]);
+            }
+            else
+            {
+                f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
+            }
             if (f_stick_val[0] < 0.0f)
             {
                 if (ctx->i_propmode_value[0] < 3)
@@ -927,8 +1005,16 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             return (1.0f / 16.0f);
         }
         XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
-        f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
-        f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1]);
+        if (ctx->ddenn_cl300_detents)
+        {
+            f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0]);
+            f_stick_val[1] = throttle_mapping_ddcl30(1.0f - f_stick_val[1]);
+        }
+        else
+        {
+            f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
+            f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1]);
+        }
         if (f_stick_val[0] < 0.0f)
         {
             if (ctx->i_propmode_value[0] < 3)
