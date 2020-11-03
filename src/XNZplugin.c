@@ -27,6 +27,7 @@
 #include "Widgets/XPStandardWidgets.h"
 #include "Widgets/XPWidgets.h"
 #include "XPLM/XPLMDataAccess.h"
+#include "XPLM/XPLMMenus.h"
 #include "XPLM/XPLMPlanes.h"
 #include "XPLM/XPLMPlugin.h"
 #include "XPLM/XPLMProcessing.h"
@@ -117,7 +118,10 @@ typedef struct
     int id_propeller_axis_3;
     int asymmetrical_thrust;
     int ddenn_cl300_detents;
-    // TODO: disab. command
+
+    XPLMMenuID id_th_on_off;
+    int id_menu_item_on_off;
+    int tca_support_enabled;
 }
 xnz_context;
 
@@ -148,6 +152,7 @@ xnz_context *global_context = NULL;
 static   int xnz_log       (const char *format, ...);
 static float callback_hdlr(float, float, int, void*);
 static float throttle_hdlr(float, float, int, void*);
+static void  menu_hdlr_fnc(void*,             void*);
 static inline float throttle_mapping(float rawvalue);
 
 #if IBM
@@ -308,6 +313,18 @@ PLUGIN_API int XPluginEnable(void)
     }
     XPLMRegisterFlightLoopCallback((global_context->f_l_th = &throttle_hdlr), 0, global_context);
     global_context->id_propeller_axis_3 = -1;
+
+    /* TCA quadrant support: toggle on/off via menu */
+    if (NULL == (global_context->id_th_on_off = XPLMCreateMenu("x-nullzones", NULL, 0, &menu_hdlr_fnc, global_context)))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (XPLMCreateMenu)\n"); goto fail;
+    }
+    if (0 > (global_context->id_menu_item_on_off = XPLMAppendMenuItem(global_context->id_th_on_off, "TCA Throttle Quadrant", &global_context->id_menu_item_on_off, 0)))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (XPLMAppendMenuItem)\n"); goto fail;
+    }
+    XPLMCheckMenuItem(global_context->id_th_on_off, global_context->id_menu_item_on_off, xplm_Menu_Checked);
+    global_context->tca_support_enabled = 1;
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
@@ -573,6 +590,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                     global_context->f_thr_tolis = global_context->f_thr_array;
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
+                    xnz_log("x-nullzones: setting TCA flightloop callback interval (enabled: %s)\n",
+                            global_context->tca_support_enabled == 0 ? "no" : "yes");
                 }
 
                 // init data, start flightloop callback
@@ -931,6 +950,12 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         xnz_context *ctx = inRefcon;
         int symmetrical_thrust = !ctx->asymmetrical_thrust;
 
+        /* shall we be doing something? */
+        if (ctx->tca_support_enabled == 0)
+        {
+            return (1.0f / 16.0f);
+        }
+
         /* check autothrust status */
         if (ctx->f_thr_tolis == NULL && ctx->use_320ultimate_api < 1)
         {   // Airbus A/T doesn't move levers, status not relevant for us
@@ -1065,6 +1090,37 @@ static int xnz_log(const char *format, ...)
     }
     va_end(ap);
     return ret;
+}
+
+static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
+{
+    if (inMenuRef)
+    {
+        if (inItemRef)
+        {
+            int *item = inItemRef;
+            xnz_context *ctx = inMenuRef;
+            if (*item == ctx->id_menu_item_on_off)
+            {
+                XPLMMenuCheck state = xplm_Menu_Checked;
+                XPLMCheckMenuItemState(ctx->id_th_on_off, ctx->id_menu_item_on_off, &state);
+                if (state == xplm_Menu_Checked)
+                {
+                    XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_NoCheck);
+                    xnz_log("x-nullzones [info]: menu: disabling TCA flight loop callback\n");
+                    global_context->tca_support_enabled = 0;
+                    return;
+                }
+                XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_Checked);
+                xnz_log("x-nullzones [info]: menu: enabling TCA flight loop callback\n");
+                global_context->tca_support_enabled = 1;
+                return;
+            }
+            return;
+        }
+        return;
+    }
+    return;
 }
 
 #undef TCA_IDLE_CTR
