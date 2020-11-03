@@ -350,7 +350,6 @@ static void xnz_context_reset(xnz_context *ctx)
 {
     if (ctx)
     {
-        // TODO: re-assign axes when there are 3 or more turbo/propeller engines
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_cb, 0, 1, ctx);
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
         memset(ctx->f_servos, (int)NULL, sizeof(ctx->f_servos));
@@ -381,6 +380,13 @@ PLUGIN_API void XPluginDisable(void)
     /* flight loop callback */
     XPLMUnregisterFlightLoopCallback(global_context->f_l_cb, global_context);
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
+
+    /* re-enable prop 3/4 axes */
+    if (global_context->id_propeller_axis_3 >= 0)
+    {
+        int pr_axis_ass[2] = { 26, 27, };
+        XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->id_propeller_axis_3, 2);
+    }
 
     /* reset nullzones to default/preferences values */
     XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
@@ -546,12 +552,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     size_t size = global_context->i_version_simulator < 11000 ? 100 : 500;
                     for (size_t i = 0; i < size - 1; i++)
                     {
+                        int no_axis_ass[2] = { 0, 0, };
                         int i_stick_ass[2]; XPLMGetDatavi(global_context->i_stick_ass, i_stick_ass, i, 2);
                         if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27)
                         {
-                            xnz_log("x-nullzones: found prop 3/4 axes at index "
-                                    "(%02zd, %02zd) with assignment (%02d, %02d)\n",
-                                    i, i + 1, i_stick_ass[0], i_stick_ass[1]);
+                            if (global_context->tca_support_enabled)
+                            {
+                                // unassign to avoid conflict w/4-engine turbo/prop aircraft
+                                XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, i, 2);
+                            }
+                            xnz_log("x-nullzones: found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]);
                             global_context->id_propeller_axis_3 = i;
                             break;
                         }
@@ -582,7 +592,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         XPLMGetDatavi(global_context->i_ngine_typ, acf_en_type, 0, acf_en_num);
                         int dummy = acf_en_type[acf_en_num - 1] != acf_en_type[acf_en_num - 2];
                         global_context->asymmetrical_thrust = !(((2 != (acf_en_num - dummy))));
-                        // TODO: unassign axes when there are 3 or more turbo/propeller engines
                     }
                     else
                     {
@@ -1106,10 +1115,20 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
                 XPLMCheckMenuItemState(ctx->id_th_on_off, ctx->id_menu_item_on_off, &state);
                 if (state == xplm_Menu_Checked)
                 {
+                    if (ctx->id_propeller_axis_3 >= 0)
+                    {
+                        int pr_axis_ass[2] = { 26, 27, };
+                        XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->id_propeller_axis_3, 2);
+                    }
                     XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_NoCheck);
                     xnz_log("x-nullzones [info]: menu: disabling TCA flight loop callback\n");
                     global_context->tca_support_enabled = 0;
                     return;
+                }
+                if (ctx->id_propeller_axis_3 >= 0)
+                {
+                    int no_axis_ass[2] = { 0, 0, };
+                    XPLMSetDatavi(ctx->i_stick_ass, no_axis_ass, ctx->id_propeller_axis_3, 2);
                 }
                 XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_Checked);
                 xnz_log("x-nullzones [info]: menu: enabling TCA flight loop callback\n");
