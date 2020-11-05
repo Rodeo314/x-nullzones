@@ -360,6 +360,11 @@ static void xnz_context_reset(xnz_context *ctx)
         XPLMSetDataf(ctx->nullzone[1], ctx->prefs_nullzone[1]);
         XPLMSetDataf(ctx->nullzone[2], ctx->prefs_nullzone[2]);
         XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
+        if (ctx->id_propeller_axis_3 >= 0)
+        {
+            int pr_axis_ass[2] = { 26, 27, };
+            XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->id_propeller_axis_3, 2);
+        }
         if (XPIsWidgetVisible(ctx->widgetid[1]) != 0)
         {
             XPHideWidget(ctx->widgetid[0]);
@@ -441,6 +446,11 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
             XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
             XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
+            if (global_context->id_propeller_axis_3 >= 0)
+            {
+                int pr_axis_ass[2] = { 26, 27, };
+                XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->id_propeller_axis_3, 2);
+            }
             return;
 
         case XPLM_MSG_PLANE_UNLOADED:
@@ -552,15 +562,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     size_t size = global_context->i_version_simulator < 11000 ? 100 : 500;
                     for (size_t i = 0; i < size - 1; i++)
                     {
-                        int no_axis_ass[2] = { 0, 0, };
                         int i_stick_ass[2]; XPLMGetDatavi(global_context->i_stick_ass, i_stick_ass, i, 2);
                         if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27)
                         {
-                            if (global_context->tca_support_enabled)
-                            {
-                                // unassign to avoid conflict w/4-engine turbo/prop aircraft
-                                XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, i, 2);
-                            }
                             xnz_log("x-nullzones: found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]);
                             global_context->id_propeller_axis_3 = i;
                             break;
@@ -596,6 +600,11 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     else
                     {
                         global_context->asymmetrical_thrust = 0;
+                    }
+                    if (global_context->id_propeller_axis_3 >= 0)
+                    {
+                        int no_axis_ass[2] = { 0, 0, };
+                        XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->id_propeller_axis_3, 2);
                     }
                     global_context->f_thr_tolis = global_context->f_thr_array;
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
