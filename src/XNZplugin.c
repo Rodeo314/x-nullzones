@@ -312,7 +312,6 @@ PLUGIN_API int XPluginEnable(void)
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (rev_tog2)\n"); goto fail;
     }
     XPLMRegisterFlightLoopCallback((global_context->f_l_th = &throttle_hdlr), 0, global_context);
-    global_context->id_propeller_axis_3 = -1;
 
     /* TCA quadrant support: toggle on/off via menu */
     if (NULL == (global_context->id_th_on_off = XPLMCreateMenu("x-nullzones", NULL, 0, &menu_hdlr_fnc, global_context)))
@@ -324,13 +323,18 @@ PLUGIN_API int XPluginEnable(void)
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (XPLMAppendMenuItem)\n"); goto fail;
     }
     XPLMCheckMenuItem(global_context->id_th_on_off, global_context->id_menu_item_on_off, xplm_Menu_Checked);
-    global_context->tca_support_enabled = 1;
 
     /* all good */
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     global_context->i_version_simulator = outXPlaneVersion;
     global_context->i_version_xplm_apis = outXPLMVersion;
+    global_context->id_propeller_axis_3 = -1;
+    global_context->tca_support_enabled = 1;
     global_context->i_context_init_done = 0;
+    global_context->use_320ultimate_api = 0;
+    global_context->ddenn_cl300_detents = 0;
+    global_context->f_thr_array = NULL;
+    global_context->f_thr_tolis = NULL;
     return 1;
 
 fail:
@@ -463,6 +467,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
         case XPLM_MSG_PLANE_LOADED:
             if (inParam == XPLM_USER_AIRCRAFT) // user's plane changing
             {
+                global_context->i_context_init_done = 0;
+                return;
+            }
+            break;
+
+        case XPLM_MSG_LIVERY_LOADED:
+            if (inParam == XPLM_USER_AIRCRAFT && !global_context->i_context_init_done) // wait until aircraft plugins loaded (for custom datarefs)
+            {
+                XPLMPluginID test = XPLM_NO_PLUGIN_ID;
+
                 global_context->minimum_null_zone = 0.04f; // hardcoded for now
                 global_context->nominal_roll_coef = XPLMGetDataf(global_context->acf_roll_co);
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
@@ -473,6 +487,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->prefs_nullzone[1],
                         global_context->prefs_nullzone[2],
                         global_context->minimum_null_zone);
+
                 if (global_context->i_version_simulator < 11000)
                 {
                     float rc0; ACF_ROLL_SET(rc0, GROUNDSP_KTS_MIN, global_context->nominal_roll_coef);
@@ -481,14 +496,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     xnz_log("x-nullzones: new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
                             global_context->nominal_roll_coef, rc0, rc1, rc2);
                 }
-                return;
-            }
-            break;
-
-        case XPLM_MSG_LIVERY_LOADED:
-            if (inParam == XPLM_USER_AIRCRAFT && !global_context->i_context_init_done) // wait until aircraft plugins loaded (for custom datarefs)
-            {
-                XPLMPluginID test = XPLM_NO_PLUGIN_ID;
 
                 // check for all supported autopilot/servo/autothrottle datarefs
                 for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_dataref_names[i] != NULL && j < k; i++)
