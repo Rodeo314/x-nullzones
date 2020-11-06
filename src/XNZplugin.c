@@ -148,6 +148,7 @@ static const char *f_autot_dataref_names[] =
 };
 
 xnz_context *global_context = NULL;
+int first_xplane_run = 1;
 
 static   int xnz_log       (const char *format, ...);
 static float callback_hdlr(float, float, int, void*);
@@ -1021,7 +1022,17 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                 fa1++; continue;
             }
         }
+
+        /* now we read the raw axis values */
         XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->id_propeller_axis_3, 2);
+        if (first_xplane_run)
+        {
+            if (f_stick_val[0] < TCA_DEADBAND && f_stick_val[1] < TCA_DEADBAND)
+            {
+                return (1.0f / 20.0f); // haven't received input from hardware yet
+            }
+            first_xplane_run = 0;
+        }
         if (fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_DEADBAND)
         {
             symmetrical_thrust = 1;
