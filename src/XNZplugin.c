@@ -922,9 +922,10 @@ static inline float throttle_mapping_ddcl30(float rawvalue)
     }
     if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
     {
-        float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
-        float toidle = (rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND));
-        return 2.4f / 3.0f * non_linear_centered(toidle / extent);
+        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
+        float mx = TCA_CLMB_CTR - TCA_DEADBAND;
+        float ve = (rawvalue - mn) / (mx - mn);
+        return 2.4f / 3.0f * non_linear_centered(ve);
     }
     return 0.0f; // default to forward idle
 }
@@ -956,9 +957,10 @@ static inline float throttle_mapping_toliss(float rawvalue)
     }
     if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
     {
-        float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
-        float toidle = rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND);
-        return 0.68f * non_linear_centered(toidle / extent);
+        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
+        float mx = TCA_CLMB_CTR - TCA_DEADBAND;
+        float ve = (rawvalue - mn) / (mx - mn);
+        return 0.68f * non_linear_centered(ve);
     }
     return 0.0f; // default to forward idle
 }
