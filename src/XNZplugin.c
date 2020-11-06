@@ -122,6 +122,7 @@ typedef struct
     XPLMMenuID id_th_on_off;
     int id_menu_item_on_off;
     int tca_support_enabled;
+    int skip_idle_overwrite;
 }
 xnz_context;
 
@@ -331,6 +332,7 @@ PLUGIN_API int XPluginEnable(void)
     global_context->i_version_xplm_apis = outXPLMVersion;
     global_context->id_propeller_axis_3 = -1;
     global_context->tca_support_enabled = 1;
+    global_context->skip_idle_overwrite = 0;
     global_context->i_context_init_done = 0;
     global_context->use_320ultimate_api = 0;
     global_context->ddenn_cl300_detents = 0;
@@ -378,6 +380,7 @@ static void xnz_context_reset(xnz_context *ctx)
         ctx->i_context_init_done = 0;
         ctx->use_320ultimate_api = 0;
         ctx->ddenn_cl300_detents = 0;
+        ctx->skip_idle_overwrite = 0;
         ctx->f_thr_array = NULL;
     }
 }
@@ -615,6 +618,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         int no_axis_ass[2] = { 0, 0, };
                         XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->id_propeller_axis_3, 2);
                     }
+                    global_context->skip_idle_overwrite = 0;
                     global_context->f_thr_tolis = global_context->f_thr_array;
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
                     xnz_log("x-nullzones: setting TCA flightloop callback interval (enabled: %s)\n",
@@ -1077,8 +1081,26 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         if (symmetrical_thrust)
         {
             float addition = f_stick_val[0] + f_stick_val[1];
-            f_stick_val[0] = addition / 2.0f;
-            f_stick_val[1] = f_stick_val[0];
+            if (0.0f == addition)
+            {
+                if (ctx->skip_idle_overwrite)
+                {
+                    return (1.0f / 20.0f);
+                }
+                /*
+                 * Don't keep writing idle thrust over and over again.
+                 * This allows simmers to use other means of controlling aircraft
+                 * thrust when both TCA levers are set in an idle detent position.
+                 */
+                f_stick_val[0] = f_stick_val[1] = 0.0f;
+                ctx->skip_idle_overwrite = 1;
+            }
+            else
+            {
+                f_stick_val[0] = addition / 2.0f;
+                f_stick_val[1] = f_stick_val[0];
+                ctx->skip_idle_overwrite = 0;
+            }
         }
         if (ctx->use_320ultimate_api > 0)
         {
@@ -1205,6 +1227,7 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
                     XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_NoCheck);
                     xnz_log("x-nullzones [info]: menu: disabling TCA flight loop callback\n");
                     global_context->tca_support_enabled = 0;
+                    global_context->skip_idle_overwrite = 0;
                     return;
                 }
                 if (ctx->id_propeller_axis_3 >= 0)
@@ -1215,6 +1238,7 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
                 XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_Checked);
                 xnz_log("x-nullzones [info]: menu: enabling TCA flight loop callback\n");
                 global_context->tca_support_enabled = 1;
+                global_context->skip_idle_overwrite = 0;
                 return;
             }
             return;
