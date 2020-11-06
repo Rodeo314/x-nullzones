@@ -747,7 +747,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             ctx->last_throttle_all = f_throttall;
             if (ctx->tca_support_enabled && ctx->id_propeller_axis_3 >= 0)
             {
-                ctx->show_throttle_all = 1.0f;
+                ctx->show_throttle_all = 1.5f;
             }
         }
         if (ctx->show_throttle_all < T_ZERO ||
