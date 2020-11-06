@@ -853,7 +853,10 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[2], nullzone_yaw_tiller);
         }
-        ctx->last_throttle_all = f_throttall;
+        if (ctx->tca_support_enabled == 0 || ctx->id_propeller_axis_3 < 0)
+        {
+            ctx->last_throttle_all = f_throttall;
+        }
         return (1.0f / 20.0f); // run often
     }
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
