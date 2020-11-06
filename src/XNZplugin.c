@@ -578,7 +578,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             break;
                         }
                     }
-                    if (global_context->id_propeller_axis_3 >= 0 && 1 /* debug */)
+                    if (global_context->id_propeller_axis_3 >= 0 && 0 /* debug */)
                     {
                         float last = -2.0f;
                         for (int i = 0; i <= 200; i++)
