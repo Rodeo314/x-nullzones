@@ -996,7 +996,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         /* shall we be doing something? */
         if (ctx->tca_support_enabled == 0)
         {
-            return (1.0f / 16.0f);
+            return (1.0f / 20.0f);
         }
 
         /* check autothrust status */
@@ -1008,7 +1008,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             {
                 if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
                 {
-                    return (1.0f / 16.0f);
+                    return (1.0f / 20.0f);
                 }
                 ia1++; continue;
             }
@@ -1016,7 +1016,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             {
                 if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
                 {
-                    return (1.0f / 16.0f);
+                    return (1.0f / 20.0f);
                 }
                 fa1++; continue;
             }
@@ -1034,7 +1034,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         if (ctx->use_320ultimate_api > 0)
         {
-            return (1.0f / 16.0f); // TODO: implement
+            return (1.0f / 20.0f); // TODO: implement
         }
         if (ctx->f_thr_tolis)
         {
@@ -1042,7 +1042,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0]);
             f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1]);
             XPLMSetDatavf(ctx->f_thr_tolis, f_stick_val, 0, 2);
-            return (1.0f / 16.0f);
+            return (1.0f / 20.0f);
         }
         if (symmetrical_thrust)
         {
@@ -1070,7 +1070,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                 }
             }
             XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
-            return (1.0f / 16.0f);
+            return (1.0f / 20.0f);
         }
         XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
         if (ctx->ddenn_cl300_detents)
@@ -1114,7 +1114,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         f_stick_val[0] = fabsf(f_stick_val[0]);
         f_stick_val[1] = fabsf(f_stick_val[1]);
         XPLMSetDatavf(ctx->f_thr_gener, f_stick_val, 0, 2);
-        return (1.0f / 16.0f);
+        return (1.0f / 20.0f);
     }
     XPLMDebugString("x-nullzones [error]: throttle_hdlr: inRefcon == NULL, disabling callback");
     return 0;
