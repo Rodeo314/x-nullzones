@@ -745,6 +745,10 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             ctx->throttle_did_change = 1;
             ctx->show_throttle_all = 3.0f;
             ctx->last_throttle_all = f_throttall;
+            if (ctx->tca_support_enabled && ctx->id_propeller_axis_3 >= 0)
+            {
+                ctx->show_throttle_all = 1.0f;
+            }
         }
         if (ctx->show_throttle_all < T_ZERO ||
             ctx->ice_detect_positive ||
