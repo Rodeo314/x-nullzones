@@ -1081,7 +1081,9 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         if (symmetrical_thrust)
         {
             float addition = f_stick_val[0] + f_stick_val[1];
-            if (0.0f == addition)
+            f_stick_val[0] = addition / 2.0f;
+            f_stick_val[1] = f_stick_val[0];
+            if (throttle_mapping(1.0f - f_stick_val[0]) == 0.0f)
             {
                 if (ctx->skip_idle_overwrite > 9)
                 {
@@ -1092,13 +1094,10 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                  * This allows simmers to use other means of controlling aircraft
                  * thrust when both TCA levers are set in an idle detent position.
                  */
-                f_stick_val[0] = f_stick_val[1] = 0.0f;
                 ctx->skip_idle_overwrite++;
             }
             else
             {
-                f_stick_val[0] = addition / 2.0f;
-                f_stick_val[1] = f_stick_val[0];
                 ctx->skip_idle_overwrite = 0;
             }
         }
