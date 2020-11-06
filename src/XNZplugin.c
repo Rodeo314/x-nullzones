@@ -1083,7 +1083,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             float addition = f_stick_val[0] + f_stick_val[1];
             if (0.0f == addition)
             {
-                if (ctx->skip_idle_overwrite)
+                if (ctx->skip_idle_overwrite > 9)
                 {
                     return (1.0f / 20.0f);
                 }
@@ -1093,7 +1093,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                  * thrust when both TCA levers are set in an idle detent position.
                  */
                 f_stick_val[0] = f_stick_val[1] = 0.0f;
-                ctx->skip_idle_overwrite = 1;
+                ctx->skip_idle_overwrite++;
             }
             else
             {
