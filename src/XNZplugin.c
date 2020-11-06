@@ -886,21 +886,21 @@ static inline float throttle_mapping_ddcl30(float rawvalue)
     }
     if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
     {
-        return 1.0f; // APR
+        return 2.8f / 3.0f; // TO
     }
     if (rawvalue > (TCA_CLMB_CTR + 0.5f * (TCA_FLEX_CTR - TCA_CLMB_CTR)))
     {
-        return 2.8f / 3.0f; // TO
+        return 2.6f / 3.0f; // CLB
     }
     if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
     {
-        return 2.6f / 3.0f; // CLB
+        return 2.5f / 3.0f; // CRZ
     }
     if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
     {
         float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
         float toidle = (rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND));
-        return 2.5f / 3.0f * non_linear_centered(toidle / extent);
+        return 2.4f / 3.0f * non_linear_centered(toidle / extent);
     }
     return 0.0f; // default to forward idle
 }
