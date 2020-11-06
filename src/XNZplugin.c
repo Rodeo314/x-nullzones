@@ -903,9 +903,10 @@ static inline float throttle_mapping_ddcl30(float rawvalue)
         {
             return -1.0f;
         }
-        float extent = (TCA_IDLE_CTR - TCA_DEADBAND) - TCA_DEADBAND;
-        float tomaxr = extent - (rawvalue - TCA_DEADBAND);
-        return (-0.1f - (0.9f * sqrtf(tomaxr / extent)));
+        float min = TCA_DEADBAND;
+        float max = TCA_IDLE_CTR - TCA_DEADBAND;
+        float val = (rawvalue - min) / (max - min);
+        return 0.9f * non_linear_inverted(val) - 1.0f;
     }
     if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
     {
@@ -936,9 +937,10 @@ static inline float throttle_mapping_toliss(float rawvalue)
         {
             return -1.0f;
         }
-        float extent = (TCA_IDLE_CTR - TCA_DEADBAND) - TCA_DEADBAND;
-        float tomaxr = extent - (rawvalue - TCA_DEADBAND);
-        return (-0.1f - (0.9f * sqrtf(tomaxr / extent)));
+        float min = TCA_DEADBAND;
+        float max = TCA_IDLE_CTR - TCA_DEADBAND;
+        float val = (rawvalue - min) / (max - min);
+        return 0.9f * non_linear_inverted(val) - 1.0f;
     }
     if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
     {
@@ -982,9 +984,10 @@ static inline float throttle_mapping(float rawvalue)
         {
             return -1.0f;
         }
-        float extent = (TCA_IDLE_CTR - TCA_DEADBAND) - TCA_DEADBAND;
-        float tomaxr = extent - (rawvalue - TCA_DEADBAND);
-        return (-0.1f - (0.9f * sqrtf(tomaxr / extent)));
+        float min = TCA_DEADBAND;
+        float max = TCA_IDLE_CTR - TCA_DEADBAND;
+        float val = (rawvalue - min) / (max - min);
+        return 0.9f * non_linear_inverted(val) - 1.0f;
     }
     if (rawvalue > (1.0f - TCA_DEADBAND))
     {
