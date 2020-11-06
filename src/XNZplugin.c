@@ -1027,7 +1027,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->id_propeller_axis_3, 2);
         if (first_xplane_run)
         {
-            if (f_stick_val[0] < TCA_DEADBAND && f_stick_val[1] < TCA_DEADBAND)
+            if (f_stick_val[0] < TCA_DEADBAND || f_stick_val[1] < TCA_DEADBAND)
             {
                 return (1.0f / 20.0f); // haven't received input from hardware yet
             }
