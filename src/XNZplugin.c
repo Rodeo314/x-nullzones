@@ -972,7 +972,8 @@ static inline float throttle_mapping_toliss(float rawvalue)
  * 0.000f | linear | 0.750f | 1.000f *
  * 0.000f | 0.700f | linear | 1.000f *
  * 0.000f | 0.750f | linear | 1.000f *
- * 0.000f | linear | 0.875f | 1.000f * <------
+ * 0.000f | linear | 0.875f | 1.000f *
+ * 0.000f | 0.500f | curved | 1.000f * <------
  *************************************
  */
 static inline float throttle_mapping(float rawvalue)
@@ -995,19 +996,23 @@ static inline float throttle_mapping(float rawvalue)
     {
         return 1.0f;
     }
-    if (rawvalue >= (TCA_CLMB_CTR - TCA_DEADBAND))
+    if (rawvalue > (TCA_CLMB_CTR + TCA_DEADBAND))
     {
         float mx = 1.0f - TCA_DEADBAND;
-        float mn = TCA_CLMB_CTR - TCA_DEADBAND;
+        float mn = TCA_CLMB_CTR + TCA_DEADBAND;
         float ve = (rawvalue - mn) / (mx - mn);
-        return 0.68f + 0.32f * non_linear_centered(ve);
+        return 0.5f + 0.5f * non_linear_standard(ve);
     }
-    if (rawvalue >= (TCA_IDLE_CTR + TCA_DEADBAND))
+    if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
+    {
+        return 0.5f; // wide detent at 50% thrust
+    }
+    if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
     {
         float mx = TCA_CLMB_CTR - TCA_DEADBAND;
         float mn = TCA_IDLE_CTR + TCA_DEADBAND;
         float ve = (rawvalue - mn) / (mx - mn);
-        return 0.68f * non_linear_centered(ve);
+        return 0.5f * non_linear_inverted(ve);
     }
     return 0.0f; // default to forward idle
 }
