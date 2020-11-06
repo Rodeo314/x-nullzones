@@ -577,7 +577,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             break;
                         }
                     }
-                    if (global_context->id_propeller_axis_3 >= 0 && 0 /* debug */)
+                    if (global_context->id_propeller_axis_3 >= 0 && 1 /* debug */)
                     {
                         float last = -2.0f;
                         for (int i = 0; i <= 200; i++)
@@ -967,17 +967,17 @@ static inline float throttle_mapping(float rawvalue)
     {
         return 1.0f;
     }
-    if (rawvalue >= TCA_FLEX_CTR)
+    if (rawvalue >= (TCA_CLMB_CTR - TCA_DEADBAND))
     {
-        float toflex = rawvalue - TCA_FLEX_CTR;
-        float extent = (1.0f - TCA_DEADBAND) - TCA_FLEX_CTR;
-        return 0.875f + ((1.0f - 0.875f) * (toflex / extent));
+        float toflex = rawvalue - (TCA_CLMB_CTR - TCA_DEADBAND);
+        float extent = (1.0f - TCA_DEADBAND) - (TCA_CLMB_CTR - TCA_DEADBAND);
+        return 0.68f + 0.32f * non_linear_centered(toflex / extent);
     }
     if (rawvalue >= (TCA_IDLE_CTR + TCA_DEADBAND))
     {
-        float extent = TCA_FLEX_CTR - (TCA_IDLE_CTR + TCA_DEADBAND);
+        float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
         float toidle = rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND);
-        return 0.875f * non_linear_centered(toidle / extent);
+        return 0.68f * non_linear_centered(toidle / extent);
     }
     return 0.0f; // default to forward idle
 }
