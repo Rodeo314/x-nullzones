@@ -860,15 +860,37 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     return 0;
 }
 
+static inline float non_linear_standard(float linear_val)
+{
+    return sqrtf(linear_val);
+}
+
+static inline float non_linear_inverted(float linear_val)
+{
+    return 1.0f - sqrtf(1.0f - linear_val);
+}
+
 static inline float non_linear_centered(float linear_val)
 {
+    if (linear_val < 0.0f)
+    {
+        return 0.0f;
+    }
+    if (linear_val > 1.0f)
+    {
+        return 1.0f;
+    }
     if (linear_val < 0.5f)
     {
-        return 0.5f - 0.5f * sqrtf(2.0f * ((1.0f - linear_val) - 0.5f));
+        float min = 0.0f, max = 0.5f;
+        float val = (linear_val - min) / (max - min);
+        return min + 0.5f * non_linear_inverted(val);
     }
     if (linear_val > 0.5f)
     {
-        return 0.5f + 0.5f * sqrtf(2.0f * (linear_val - 0.5f));
+        float min = 0.5f, max = 1.0f;
+        float val = (linear_val - min) / (max - min);
+        return min + 0.5f * non_linear_standard(val);
     }
     return 0.5f;
 }
