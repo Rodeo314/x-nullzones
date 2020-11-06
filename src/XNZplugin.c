@@ -922,8 +922,8 @@ static inline float throttle_mapping_ddcl30(float rawvalue)
     }
     if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
     {
-        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
         float mx = TCA_CLMB_CTR - TCA_DEADBAND;
+        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
         float ve = (rawvalue - mn) / (mx - mn);
         return 2.4f / 3.0f * non_linear_centered(ve);
     }
@@ -957,8 +957,8 @@ static inline float throttle_mapping_toliss(float rawvalue)
     }
     if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
     {
-        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
         float mx = TCA_CLMB_CTR - TCA_DEADBAND;
+        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
         float ve = (rawvalue - mn) / (mx - mn);
         return 0.68f * non_linear_centered(ve);
     }
@@ -997,15 +997,17 @@ static inline float throttle_mapping(float rawvalue)
     }
     if (rawvalue >= (TCA_CLMB_CTR - TCA_DEADBAND))
     {
-        float toflex = rawvalue - (TCA_CLMB_CTR - TCA_DEADBAND);
-        float extent = (1.0f - TCA_DEADBAND) - (TCA_CLMB_CTR - TCA_DEADBAND);
-        return 0.68f + 0.32f * non_linear_centered(toflex / extent);
+        float mx = 1.0f - TCA_DEADBAND;
+        float mn = TCA_CLMB_CTR - TCA_DEADBAND;
+        float ve = (rawvalue - mn) / (mx - mn);
+        return 0.68f + 0.32f * non_linear_centered(ve);
     }
     if (rawvalue >= (TCA_IDLE_CTR + TCA_DEADBAND))
     {
-        float extent = (TCA_CLMB_CTR - TCA_DEADBAND) - (TCA_IDLE_CTR + TCA_DEADBAND);
-        float toidle = rawvalue - (TCA_IDLE_CTR + TCA_DEADBAND);
-        return 0.68f * non_linear_centered(toidle / extent);
+        float mx = TCA_CLMB_CTR - TCA_DEADBAND;
+        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
+        float ve = (rawvalue - mn) / (mx - mn);
+        return 0.68f * non_linear_centered(ve);
     }
     return 0.0f; // default to forward idle
 }
