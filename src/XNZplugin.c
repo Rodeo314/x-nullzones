@@ -800,7 +800,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                     ctx->id_propeller_axis_3 >= 0 &&
                     ctx->skip_idle_overwrite == 0)
                 {
-                    snprintf(ctx->overly_txt_buf, 11, "%4.2f", f_throttall);
+                    snprintf(ctx->overly_txt_buf, 11, "%7.2f", f_throttall);
                 }
                 else
                 {
