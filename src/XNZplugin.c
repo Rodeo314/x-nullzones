@@ -796,7 +796,16 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             if (ctx->throttle_did_change)
             {
-                snprintf(ctx->overly_txt_buf, 11, "%7.5f", f_throttall);
+                if (ctx->tca_support_enabled &&
+                    ctx->id_propeller_axis_3 >= 0 &&
+                    ctx->skip_idle_overwrite == 0)
+                {
+                    snprintf(ctx->overly_txt_buf, 11, "%4.2f", f_throttall);
+                }
+                else
+                {
+                    snprintf(ctx->overly_txt_buf, 11, "%7.5f", f_throttall);
+                }
                 XPSetWidgetDescriptor(ctx->widgetid[1], ctx->overly_txt_buf);
             }
             if (XPIsWidgetVisible(ctx->widgetid[1]) == 0)
