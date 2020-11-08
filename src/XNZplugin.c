@@ -43,10 +43,10 @@
 #pragma clang diagnostic pop
 #endif
 
-#define TCA_IDLE_CTR (0.28f)
-#define TCA_CLMB_CTR (0.52f)
-#define TCA_FLEX_CTR (0.72f)
-#define TCA_DEADBAND (0.04f)
+#define TCA_IDLE_CTR (0.295f)
+#define TCA_CLMB_CTR (0.515f)
+#define TCA_FLEX_CTR (0.715f)
+#define TCA_DEADBAND (0.040f)
 
 #define T_ZERO                   (00.001f)
 #define AIRSPEED_MIN_KTS         (50.000f)
@@ -583,7 +583,14 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                     if (global_context->id_propeller_axis_3 >= 0 && 0 /* debug */)
                     {
+                        xnz_log("x-nullzones [debug]: throttle_mapping ---------------\n");
                         float last = -2.0f;
+                        int detents[3] =
+                        {
+                            roundf(TCA_IDLE_CTR * 200.0f),
+                            roundf(TCA_CLMB_CTR * 200.0f),
+                            roundf(TCA_FLEX_CTR * 200.0f),
+                        };
                         for (int i = 0; i <= 200; i++)
                         {
                             float input, value = throttle_mapping((input = ((float)i / 200.0f)));
@@ -592,8 +599,24 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                                 xnz_log("x-nullzones [debug]: non-monotonically increasing throttle mapping, %.4f -> %.4f\n", last, value);
                                 exit(-1);
                             }
-                            xnz_log("x-nullzones [debug]: throttle_mapping(%.3f) = %.4f\n", input, (last = value));
+                            if (i == detents[0] || i == detents[1] || i == detents[2])
+                            {
+                                xnz_log("x-nullzones [debug]: throttle_mapping ---------------\n");
+                            }
+                            if (value < 0.0f)
+                            {
+                                xnz_log("x-nullzones [debug]: throttle_mapping(%.3f) = %.3f\n", input, (last = value));
+                            }
+                            else
+                            {
+                                xnz_log("x-nullzones [debug]: throttle_mapping(%.3f) = %.4f\n", input, (last = value));
+                            }
+                            if (i == detents[0] || i == detents[1] || i == detents[2])
+                            {
+                                xnz_log("x-nullzones [debug]: throttle_mapping ---------------\n");
+                            }
                         }
+                        xnz_log("x-nullzones [debug]: throttle_mapping ---------------\n");
                     }
                 }
                 if (global_context->id_propeller_axis_3 >= 0)
