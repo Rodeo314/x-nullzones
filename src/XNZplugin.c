@@ -183,19 +183,35 @@ BOOL APIENTRY DllMain(HANDLE hModule,
 PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 #ifndef PUBLIC_RELEASE_BUILD
-#define XNZ_LOG_PREFIX "x-nullzones"
+#define XNZ_LOG_PREFIX "x-nullzones: "
     strncpy(outName,                                     "X-Nullzones", 255);
     strncpy(outSig,                                     "Rodeo314.XNZ", 255);
     strncpy(outDesc, "Dynamic nullzones and other miscellaneous stuff", 255);
 #else
-#define XNZ_LOG_PREFIX "Quadrant314"
+#define XNZ_LOG_PREFIX "Quadrant314: "
     strncpy(outName,                                     "Quadrant314", 255);
     strncpy(outSig,                                     "Rodeo314.TCA", 255);
     strncpy(outDesc,   "\"Reverse on same axis\" thrust lever support", 255);
 #endif
 
     /* all good */
-    XPLMDebugString(XNZ_LOG_PREFIX " [info]: XPluginStart OK\n"); return 1;
+    XPLMDebugString(XNZ_LOG_PREFIX"[info]: XPluginStart OK\n"); return 1;
+}
+
+static int xnz_log(const char *format, ...)
+{
+    int ret;
+    va_list ap;
+    char string[1024];
+    va_start(ap, format);
+    ret = vsnprintf(string, sizeof(string), format, ap);
+    if (ret > 0) // output is NULL-terminated
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX);
+        XPLMDebugString(string);
+    }
+    va_end(ap);
+    return ret;
 }
 
 PLUGIN_API void XPluginStop(void)
@@ -223,54 +239,54 @@ PLUGIN_API int XPluginEnable(void)
     /* Initialize context */
     if (NULL == (global_context = malloc(sizeof(xnz_context))))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (malloc)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (malloc)\n"); goto fail;
     }
 #ifndef PUBLIC_RELEASE_BUILD
     if (NULL == (global_context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (nullzone[0])\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (nullzone[0])\n"); goto fail;
     }
     if (NULL == (global_context->nullzone[1] = XPLMFindDataRef("sim/joystick/joystick_roll_nullzone")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (nullzone[1])\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (nullzone[1])\n"); goto fail;
     }
     if (NULL == (global_context->nullzone[2] = XPLMFindDataRef("sim/joystick/joystick_heading_nullzone")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (nullzone[2])\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (nullzone[2])\n"); goto fail;
     }
     if (NULL == (global_context->f_grd_speed = XPLMFindDataRef("sim/flightmodel/position/groundspeed")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (f_grd_speed)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_grd_speed)\n"); goto fail;
     }
     if (NULL == (global_context->f_air_speed = XPLMFindDataRef("sim/flightmodel/position/indicated_airspeed")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (f_air_speed)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_air_speed)\n"); goto fail;
     }
     if (NULL == (global_context->acf_roll_co = XPLMFindDataRef("sim/aircraft/overflow/acf_roll_co")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (acf_roll_co)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (acf_roll_co)\n"); goto fail;
     }
     if (NULL == (global_context->ongroundany = XPLMFindDataRef("sim/flightmodel/failures/onground_any")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (ongroundany)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (ongroundany)\n"); goto fail;
     }
     if (NULL == (global_context->f_ice_rf[0] = XPLMFindDataRef("sim/flightmodel/failures/pitot_ice")) ||
         NULL == (global_context->f_ice_rf[1] = XPLMFindDataRef("sim/flightmodel/failures/inlet_ice")) ||
         NULL == (global_context->f_ice_rf[2] = XPLMFindDataRef("sim/flightmodel/failures/prop_ice")) ||
         NULL == (global_context->f_ice_rf[3] = XPLMFindDataRef("sim/flightmodel/failures/frm_ice")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (f_ice_rf)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_ice_rf)\n"); goto fail;
     }
     if (!(global_context->widgetid[0] = XPCreateWidget(0, 0, 0, 0, 0, "", 1, NULL,
                                                        xpWidgetClass_MainWindow)))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (widgetid)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (widgetid)\n"); goto fail;
     }
     if (!(global_context->widgetid[1] = XPCreateWidget(0, 0, 0, 0, 0, "", 0,
                                                        global_context->widgetid[0],
                                                        xpWidgetClass_Caption)))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (widgetid)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (widgetid)\n"); goto fail;
     }
     XPSetWidgetProperty(global_context->widgetid[0], xpProperty_MainWindowType, xpMainWindowStyle_Translucent);
     XPSetWidgetProperty(global_context->widgetid[1], xpProperty_CaptionLit, 1);
@@ -284,7 +300,7 @@ PLUGIN_API int XPluginEnable(void)
     /* common datarefs */
     if (NULL == (global_context->f_throttall = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio_all")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (f_throt_all)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_throt_all)\n"); goto fail;
     }
 
     /* initialize arrays */
@@ -296,55 +312,55 @@ PLUGIN_API int XPluginEnable(void)
     /* TCA thrust quadrant support */
     if (NULL == (global_context->i_stick_ass = XPLMFindDataRef("sim/joystick/joystick_axis_assignments")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (i_stick_ass)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (i_stick_ass)\n"); goto fail;
     }
     if (NULL == (global_context->f_stick_val = XPLMFindDataRef("sim/joystick/joystick_axis_values")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (f_stick_val)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_stick_val)\n"); goto fail;
     }
     if (NULL == (global_context->f_thr_gener = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (f_thr_array)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_thr_array)\n"); goto fail;
     }
     if (NULL == (global_context->i_prop_mode = XPLMFindDataRef("sim/cockpit2/engine/actuators/prop_mode")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (i_prop_mode)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (i_prop_mode)\n"); goto fail;
     }
     if (NULL == (global_context->i_ngine_num = XPLMFindDataRef("sim/aircraft/engine/acf_num_engines")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (i_ngine_num)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (i_ngine_num)\n"); goto fail;
     }
     if (NULL == (global_context->i_ngine_typ = XPLMFindDataRef("sim/aircraft/prop/acf_en_type")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (i_ngine_typ)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (i_ngine_typ)\n"); goto fail;
     }
     if (NULL == (global_context->rev_togg = XPLMFindCommand("sim/engines/thrust_reverse_toggle")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (rev_togg)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_togg)\n"); goto fail;
     }
     if (NULL == (global_context->rev_tog1 = XPLMFindCommand("sim/engines/thrust_reverse_toggle_1")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (rev_tog1)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_tog1)\n"); goto fail;
     }
     if (NULL == (global_context->rev_tog2 = XPLMFindCommand("sim/engines/thrust_reverse_toggle_2")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (rev_tog2)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_tog2)\n"); goto fail;
     }
     XPLMRegisterFlightLoopCallback((global_context->f_l_th = &throttle_hdlr), 0, global_context);
 
     /* TCA quadrant support: toggle on/off via menu */
     if (NULL == (global_context->id_th_on_off = XPLMCreateMenu(XNZ_LOG_PREFIX, NULL, 0, &menu_hdlr_fnc, global_context)))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (XPLMCreateMenu)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (XPLMCreateMenu)\n"); goto fail;
     }
     if (0 > (global_context->id_menu_item_on_off = XPLMAppendMenuItem(global_context->id_th_on_off, "TCA Throttle Quadrant", &global_context->id_menu_item_on_off, 0)))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX " [error]: XPluginEnable failed (XPLMAppendMenuItem)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (XPLMAppendMenuItem)\n"); goto fail;
     }
     XPLMCheckMenuItem(global_context->id_th_on_off, global_context->id_menu_item_on_off, xplm_Menu_Checked);
 
     /* all good */
-    XPLMDebugString(XNZ_LOG_PREFIX " [info]: XPluginEnable OK\n");
+    XPLMDebugString(XNZ_LOG_PREFIX"[info]: XPluginEnable OK\n");
     global_context->i_version_simulator = outXPlaneVersion;
     global_context->i_version_xplm_apis = outXPLMVersion;
     global_context->idx_throttle_axis_1 = -1;
@@ -444,7 +460,7 @@ PLUGIN_API void XPluginDisable(void)
     }
 
     /* all good */
-    XPLMDebugString(XNZ_LOG_PREFIX " [info]: XPluginDisable OK\n");
+    XPLMDebugString(XNZ_LOG_PREFIX"[info]: XPluginDisable OK\n");
 }
 
 static inline void dref_read_str(XPLMDataRef ref, char *buf, size_t siz)
@@ -922,7 +938,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
         return (1.0f / 20.0f); // run often
     }
-    XPLMDebugString(XNZ_LOG_PREFIX " [error]: callback_hdlr: inRefcon == NULL, disabling callback\n");
+    XPLMDebugString(XNZ_LOG_PREFIX"[error]: callback_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
 }
 #endif
@@ -1245,25 +1261,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         XPLMSetDatavf(ctx->f_thr_gener, f_stick_val, 0, 2);
         return (1.0f / 20.0f);
     }
-    XPLMDebugString(XNZ_LOG_PREFIX " [error]: throttle_hdlr: inRefcon == NULL, disabling callback\n");
+    XPLMDebugString(XNZ_LOG_PREFIX"[error]: throttle_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
-}
-
-static int xnz_log(const char *format, ...)
-{
-    int ret;
-    va_list ap;
-    char string[1024];
-    va_start(ap, format);
-    ret = vsnprintf(string + sizeof(XNZ_LOG_PREFIX) + 1, sizeof(string) - sizeof(XNZ_LOG_PREFIX) - 1, format, ap);
-    if (ret > 0) // output is NULL-terminated
-    {
-        strncpy(string, XNZ_LOG_PREFIX, sizeof(XNZ_LOG_PREFIX));
-        string[sizeof(XNZ_LOG_PREFIX)] = ' ';
-        XPLMDebugString(string);
-    }
-    va_end(ap);
-    return ret;
 }
 
 static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
