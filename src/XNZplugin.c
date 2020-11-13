@@ -818,9 +818,11 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             ctx->throttle_did_change = 1;
             ctx->show_throttle_all = 3.0f;
             ctx->last_throttle_all = f_throttall;
-            if (ctx->tca_support_enabled && ctx->idx_throttle_axis_1 >= 0)
+            if (ctx->tca_support_enabled &&
+                ctx->idx_throttle_axis_1 >= 0 &&
+                ctx->skip_idle_overwrite == 0)
             {
-                ctx->show_throttle_all = 1.5f;
+                ctx->show_throttle_all = 1.0f;
             }
         }
         if (ctx->show_throttle_all < T_ZERO ||
