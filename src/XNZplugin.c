@@ -43,11 +43,6 @@
 #pragma clang diagnostic pop
 #endif
 
-#define TCA_IDLE_CTR (0.295f)
-#define TCA_CLMB_CTR (0.515f)
-#define TCA_FLEX_CTR (0.715f)
-#define TCA_DEADBAND (0.040f)
-
 #define T_ZERO                   (00.001f)
 #define AIRSPEED_MIN_KTS         (50.000f)
 #define AIRSPEED_MAX_KTS         (62.500f)
@@ -115,7 +110,7 @@ typedef struct
     XPLMCommandRef rev_tog1;
     XPLMCommandRef rev_tog2;
     int i_propmode_value[2];
-    int id_propeller_axis_3;
+    int idx_throttle_axis_1;
     int asymmetrical_thrust;
     int ddenn_cl300_detents;
 
@@ -148,8 +143,12 @@ static const char *f_autot_dataref_names[] =
     NULL,
 };
 
-xnz_context *global_context = NULL;
-int first_xplane_run = 1;
+static int first_xplane_run = 1;
+static float TCA_IDLE_CTR = 0.295f;
+static float TCA_CLMB_CTR = 0.515f;
+static float TCA_FLEX_CTR = 0.715f;
+static float TCA_DEADBAND = 0.040f;
+static xnz_context *global_context = NULL;
 
 static   int xnz_log       (const char *format, ...);
 static float callback_hdlr(float, float, int, void*);
@@ -330,7 +329,7 @@ PLUGIN_API int XPluginEnable(void)
     XPLMDebugString("x-nullzones [info]: XPluginEnable OK\n");
     global_context->i_version_simulator = outXPlaneVersion;
     global_context->i_version_xplm_apis = outXPLMVersion;
-    global_context->id_propeller_axis_3 = -1;
+    global_context->idx_throttle_axis_1 = -1;
     global_context->tca_support_enabled = 1;
     global_context->skip_idle_overwrite = 0;
     global_context->i_context_init_done = 0;
@@ -367,10 +366,10 @@ static void xnz_context_reset(xnz_context *ctx)
         XPLMSetDataf(ctx->nullzone[1], ctx->prefs_nullzone[1]);
         XPLMSetDataf(ctx->nullzone[2], ctx->prefs_nullzone[2]);
         XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
-        if (ctx->id_propeller_axis_3 >= 0)
+        if (ctx->idx_throttle_axis_1 >= 0)
         {
-            int pr_axis_ass[2] = { 26, 27, };
-            XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->id_propeller_axis_3, 2);
+            int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+            XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
         }
         if (XPIsWidgetVisible(ctx->widgetid[1]) != 0)
         {
@@ -395,10 +394,10 @@ PLUGIN_API void XPluginDisable(void)
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
 
     /* re-enable prop 3/4 axes */
-    if (global_context->id_propeller_axis_3 >= 0)
+    if (global_context->idx_throttle_axis_1 >= 0)
     {
-        int pr_axis_ass[2] = { 26, 27, };
-        XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->id_propeller_axis_3, 2);
+        int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+        XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
     }
 
     /* reset nullzones to default/preferences values */
@@ -454,10 +453,11 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
             XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
             XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
-            if (global_context->id_propeller_axis_3 >= 0)
+            if (global_context->idx_throttle_axis_1 >= 0)
             {
-                int pr_axis_ass[2] = { 26, 27, };
-                XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->id_propeller_axis_3, 2);
+                int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+                xnz_log("x-nullzones [info]: releasing joystick axes (XPLM_MSG_WILL_WRITE_PREFS))\n");
+                XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
             }
             return;
 
@@ -568,20 +568,20 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
 
                 /* TCA thrust quadrant support */
-                if (global_context->id_propeller_axis_3 < 0)
+                if (global_context->idx_throttle_axis_1 < 0)
                 {
                     size_t size = global_context->i_version_simulator < 11000 ? 100 : 500;
                     for (size_t i = 0; i < size - 1; i++)
                     {
                         int i_stick_ass[2]; XPLMGetDatavi(global_context->i_stick_ass, i_stick_ass, i, 2);
-                        if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27)
+                        if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27) // TODO: throttle 1, 2 axes
                         {
-                            xnz_log("x-nullzones: found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]);
-                            global_context->id_propeller_axis_3 = i;
+                            xnz_log("x-nullzones: found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]); // TODO: throttle 1, 2 axes
+                            global_context->idx_throttle_axis_1 = i;
                             break;
                         }
                     }
-                    if (global_context->id_propeller_axis_3 >= 0 && 0 /* debug */)
+                    if (global_context->idx_throttle_axis_1 >= 0 && 0 /* debug */)
                     {
                         xnz_log("x-nullzones [debug]: throttle_mapping ---------------\n");
                         float last = -2.0f;
@@ -619,7 +619,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         xnz_log("x-nullzones [debug]: throttle_mapping ---------------\n");
                     }
                 }
-                if (global_context->id_propeller_axis_3 >= 0)
+                if (global_context->idx_throttle_axis_1 >= 0)
                 {
                     int acf_en_type[3], acf_en_num = XPLMGetDatai(global_context->i_ngine_num);
                     if (acf_en_num >= 2) // some Carenado have extra engine 4 special effects
@@ -636,10 +636,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     {
                         global_context->asymmetrical_thrust = 0;
                     }
-                    if (global_context->id_propeller_axis_3 >= 0)
+                    if (global_context->idx_throttle_axis_1 >= 0)
                     {
                         int no_axis_ass[2] = { 0, 0, };
-                        XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->id_propeller_axis_3, 2);
+                        XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
                     }
                     global_context->skip_idle_overwrite = 0;
                     global_context->f_thr_tolis = global_context->f_thr_array;
@@ -773,7 +773,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             ctx->throttle_did_change = 1;
             ctx->show_throttle_all = 3.0f;
             ctx->last_throttle_all = f_throttall;
-            if (ctx->tca_support_enabled && ctx->id_propeller_axis_3 >= 0)
+            if (ctx->tca_support_enabled && ctx->idx_throttle_axis_1 >= 0)
             {
                 ctx->show_throttle_all = 1.5f;
             }
@@ -820,7 +820,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             if (ctx->throttle_did_change)
             {
                 if (ctx->tca_support_enabled &&
-                    ctx->id_propeller_axis_3 >= 0 &&
+                    ctx->idx_throttle_axis_1 >= 0 &&
                     ctx->skip_idle_overwrite == 0)
                 {
                     snprintf(ctx->overly_txt_buf, 11, "%7.2f", f_throttall);
@@ -889,7 +889,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->nullzone[1], nullzone_pitch_roll);
             XPLMSetDataf(ctx->nullzone[2], nullzone_yaw_tiller);
         }
-        if (ctx->tca_support_enabled == 0 || ctx->id_propeller_axis_3 < 0)
+        if (ctx->tca_support_enabled == 0 || ctx->idx_throttle_axis_1 < 0)
         {
             ctx->last_throttle_all = f_throttall;
         }
@@ -1097,7 +1097,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
 
         /* now we read the raw axis values */
-        XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->id_propeller_axis_3, 2);
+        XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
         if (first_xplane_run)
         {
             if (f_stick_val[0] < TCA_DEADBAND || f_stick_val[1] < TCA_DEADBAND)
@@ -1250,21 +1250,23 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
                 XPLMCheckMenuItemState(ctx->id_th_on_off, ctx->id_menu_item_on_off, &state);
                 if (state == xplm_Menu_Checked)
                 {
-                    if (ctx->id_propeller_axis_3 >= 0)
+#ifdef PUBLIC_RELEASE_BUILD
+                    if (ctx->idx_throttle_axis_1 >= 0)
                     {
-                        int pr_axis_ass[2] = { 26, 27, };
-                        XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->id_propeller_axis_3, 2);
+                        int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+                        XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
                     }
+#endif
                     XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_NoCheck);
                     xnz_log("x-nullzones [info]: menu: disabling TCA flight loop callback\n");
                     global_context->tca_support_enabled = 0;
                     global_context->skip_idle_overwrite = 0;
                     return;
                 }
-                if (ctx->id_propeller_axis_3 >= 0)
+                if (ctx->idx_throttle_axis_1 >= 0)
                 {
                     int no_axis_ass[2] = { 0, 0, };
-                    XPLMSetDatavi(ctx->i_stick_ass, no_axis_ass, ctx->id_propeller_axis_3, 2);
+                    XPLMSetDatavi(ctx->i_stick_ass, no_axis_ass, ctx->idx_throttle_axis_1, 2);
                 }
                 XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_Checked);
                 xnz_log("x-nullzones [info]: menu: enabling TCA flight loop callback\n");
@@ -1278,11 +1280,6 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
     }
     return;
 }
-
-#undef TCA_IDLE_CTR
-#undef TCA_CLMB_CTR
-#undef TCA_FLEX_CTR
-#undef TCA_DEADBAND
 
 #undef AIRSPEED_MIN_KTS
 #undef AIRSPEED_MAX_KTS
