@@ -183,13 +183,15 @@ BOOL APIENTRY DllMain(HANDLE hModule,
 PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc)
 {
 #ifndef PUBLIC_RELEASE_BUILD
+#define XNZ_XPLM_TITLE "X-Nullzones"
 #define XNZ_LOG_PREFIX "x-nullzones: "
-    strncpy(outName,                                     "X-Nullzones", 255);
+    strncpy(outName,                                    XNZ_XPLM_TITLE, 255);
     strncpy(outSig,                                     "Rodeo314.XNZ", 255);
     strncpy(outDesc, "Dynamic nullzones and other miscellaneous stuff", 255);
 #else
+#define XNZ_XPLM_TITLE "Quadrant314"
 #define XNZ_LOG_PREFIX "Quadrant314: "
-    strncpy(outName,                                     "Quadrant314", 255);
+    strncpy(outName,                                    XNZ_XPLM_TITLE, 255);
     strncpy(outSig,                                     "Rodeo314.TCA", 255);
     strncpy(outDesc,   "\"Reverse on same axis\" thrust lever support", 255);
 #endif
@@ -349,7 +351,7 @@ PLUGIN_API int XPluginEnable(void)
     XPLMRegisterFlightLoopCallback((global_context->f_l_th = &throttle_hdlr), 0, global_context);
 
     /* TCA quadrant support: toggle on/off via menu */
-    if (NULL == (global_context->id_th_on_off = XPLMCreateMenu(XNZ_LOG_PREFIX, NULL, 0, &menu_hdlr_fnc, global_context)))
+    if (NULL == (global_context->id_th_on_off = XPLMCreateMenu(XNZ_XPLM_TITLE, NULL, 0, &menu_hdlr_fnc, global_context)))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (XPLMCreateMenu)\n"); goto fail;
     }
@@ -524,7 +526,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
                 global_context->prefs_nullzone[1] = XPLMGetDataf(global_context->nullzone[1]);
                 global_context->prefs_nullzone[2] = XPLMGetDataf(global_context->nullzone[2]);
-                xnz_log(XNZ_LOG_PREFIX": new aircraft: original nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
+                xnz_log("new aircraft: original nullzones %.3lf %.3lf %.3lf (minimum %.3lf)\n",
                         global_context->prefs_nullzone[0],
                         global_context->prefs_nullzone[1],
                         global_context->prefs_nullzone[2],
@@ -534,7 +536,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     float rc0; ACF_ROLL_SET(rc0, GROUNDSP_KTS_MIN, global_context->nominal_roll_coef);
                     float rc1; ACF_ROLL_SET(rc1, GROUNDSP_KTS_MID, global_context->nominal_roll_coef);
                     float rc2; ACF_ROLL_SET(rc2, GROUNDSP_KTS_MAX, global_context->nominal_roll_coef);
-                    xnz_log(XNZ_LOG_PREFIX": new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
+                    xnz_log("new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
                             global_context->nominal_roll_coef, rc0, rc1, rc2);
                 }
 #endif
@@ -614,7 +616,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         int i_stick_ass[2]; XPLMGetDatavi(global_context->i_stick_ass, i_stick_ass, i, 2);
                         if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27) // TODO: throttle 1, 2 axes
                         {
-                            xnz_log(XNZ_LOG_PREFIX": found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]); // TODO: throttle 1, 2 axes
+                            xnz_log("found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]); // TODO: throttle 1, 2 axes
                             global_context->idx_throttle_axis_1 = i;
                             break;
                         }
@@ -682,7 +684,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     global_context->skip_idle_overwrite = 0;
                     global_context->f_thr_tolis = global_context->f_thr_array;
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
-                    xnz_log(XNZ_LOG_PREFIX": setting TCA flightloop callback interval (enabled: %s)\n",
+                    xnz_log("setting TCA flight loop callback interval (enabled: %s)\n",
                             global_context->tca_support_enabled == 0 ? "no" : "yes");
                 }
 
@@ -1318,6 +1320,7 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
 #undef GROUNDSP_KTS_MID
 #undef GROUNDSP_KTS_MAX
 #undef XNZ_LOG_PREFIX
+#undef XNZ_XPLM_TITLE
 #undef ACF_ROLL_SET
 #undef MPS2KTS
 #undef T_ZERO
