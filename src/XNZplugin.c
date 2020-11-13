@@ -413,7 +413,7 @@ static void xnz_context_reset(xnz_context *ctx)
         memset(ctx->f_autoth, (int)NULL, sizeof(ctx->f_autoth));
         if (ctx->idx_throttle_axis_1 >= 0)
         {
-            int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+            int pr_axis_ass[2] = { 20, 21, };
             XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
         }
         ctx->i_context_init_done = 0;
@@ -447,10 +447,10 @@ PLUGIN_API void XPluginDisable(void)
 
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
 
-    /* re-enable prop 3/4 axes */
+    /* re-enable throttle 1/2 axes */
     if (global_context->idx_throttle_axis_1 >= 0)
     {
-        int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+        int pr_axis_ass[2] = { 20, 21, };
         XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
     }
 
@@ -494,7 +494,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 #endif
             if (global_context->idx_throttle_axis_1 >= 0)
             {
-                int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+                int pr_axis_ass[2] = { 20, 21, };
                 xnz_log("[info]: releasing joystick axes (XPLM_MSG_WILL_WRITE_PREFS)\n");
                 XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
             }
@@ -614,9 +614,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     for (size_t i = 0; i < size - 1; i++)
                     {
                         int i_stick_ass[2]; XPLMGetDatavi(global_context->i_stick_ass, i_stick_ass, i, 2);
-                        if (i_stick_ass[0] == 26 && i_stick_ass[1] == 27) // TODO: throttle 1, 2 axes
+                        if (i_stick_ass[0] == 20 && i_stick_ass[1] == 21)
                         {
-                            xnz_log("found prop 3/4 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]); // TODO: throttle 1, 2 axes
+                            xnz_log("found throttle 1/2 axes at index (%02zd, %02zd) with assignment (%02d, %02d)\n", i, i + 1, i_stick_ass[0], i_stick_ass[1]);
                             global_context->idx_throttle_axis_1 = i;
                             break;
                         }
@@ -1286,7 +1286,7 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
 #ifdef PUBLIC_RELEASE_BUILD
                     if (ctx->idx_throttle_axis_1 >= 0)
                     {
-                        int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+                        int pr_axis_ass[2] = { 20, 21, };
                         XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
                     }
 #endif
