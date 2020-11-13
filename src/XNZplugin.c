@@ -922,7 +922,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
         return (1.0f / 20.0f); // run often
     }
-    XPLMDebugString(XNZ_LOG_PREFIX " [error]: callback_hdlr: inRefcon == NULL, disabling callback");
+    XPLMDebugString(XNZ_LOG_PREFIX " [error]: callback_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
 }
 #endif
@@ -1245,7 +1245,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         XPLMSetDatavf(ctx->f_thr_gener, f_stick_val, 0, 2);
         return (1.0f / 20.0f);
     }
-    XPLMDebugString(XNZ_LOG_PREFIX " [error]: throttle_hdlr: inRefcon == NULL, disabling callback");
+    XPLMDebugString(XNZ_LOG_PREFIX " [error]: throttle_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
 }
 
