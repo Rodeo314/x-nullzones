@@ -477,7 +477,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             if (global_context->idx_throttle_axis_1 >= 0)
             {
                 int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
-                xnz_log("[info]: releasing joystick axes (XPLM_MSG_WILL_WRITE_PREFS))\n");
+                xnz_log("[info]: releasing joystick axes (XPLM_MSG_WILL_WRITE_PREFS)\n");
                 XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
             }
             return;
