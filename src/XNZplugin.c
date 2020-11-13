@@ -67,28 +67,16 @@
 
 typedef struct
 {
-    int i_context_init_done;
-    int i_version_simulator;
-    int i_version_xplm_apis;
+#ifndef PUBLIC_RELEASE_BUILD
     XPLMFlightLoop_f f_l_cb;
     XPLMDataRef f_air_speed;
     XPLMDataRef f_grd_speed;
-    XPLMDataRef f_servos[9];
-    XPLMDataRef i_servos[9];
-    XPLMDataRef i_autoth[9];
-    XPLMDataRef f_autoth[9];
     XPLMDataRef nullzone[3];
     float prefs_nullzone[3];
     float minimum_null_zone;
     XPLMDataRef acf_roll_co;
     XPLMDataRef ongroundany;
     float nominal_roll_coef;
-    int use_320ultimate_api;
-    SharedValuesInterface s;
-    int id_f32_eng_lever_lt;
-    int id_f32_eng_lever_rt;
-    XPLMDataRef f_thr_array;
-    XPLMDataRef f_throttall;
     float last_throttle_all;
     float show_throttle_all;
     float icecheck_required;
@@ -97,6 +85,21 @@ typedef struct
     int ice_detect_positive;
     XPLMDataRef f_ice_rf[4];
     XPWidgetID  widgetid[2];
+#endif
+
+    int i_context_init_done;
+    int i_version_simulator;
+    int i_version_xplm_apis;
+    XPLMDataRef f_servos[9];
+    XPLMDataRef i_servos[9];
+    XPLMDataRef i_autoth[9];
+    XPLMDataRef f_autoth[9];
+    XPLMDataRef f_thr_array;
+    XPLMDataRef f_throttall;
+    int use_320ultimate_api;
+    SharedValuesInterface s;
+    int id_f32_eng_lever_lt;
+    int id_f32_eng_lever_rt;
 
     XPLMFlightLoop_f f_l_th;
     XPLMDataRef i_stick_ass;
@@ -151,10 +154,13 @@ static float TCA_DEADBAND = 0.040f;
 static xnz_context *global_context = NULL;
 
 static   int xnz_log       (const char *format, ...);
-static float callback_hdlr(float, float, int, void*);
 static float throttle_hdlr(float, float, int, void*);
 static void  menu_hdlr_fnc(void*,             void*);
 static inline float throttle_mapping(float rawvalue);
+
+#ifndef PUBLIC_RELEASE_BUILD
+static float callback_hdlr(float, float, int, void*);
+#endif
 
 #if IBM
 #include <windows.h>
@@ -211,6 +217,7 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (malloc)\n"); goto fail;
     }
+#ifndef PUBLIC_RELEASE_BUILD
     if (NULL == (global_context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (nullzone[0])\n"); goto fail;
@@ -239,10 +246,6 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString("x-nullzones [error]: XPluginEnable failed (ongroundany)\n"); goto fail;
     }
-    if (NULL == (global_context->f_throttall = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio_all")))
-    {
-        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_throt_all)\n"); goto fail;
-    }
     if (NULL == (global_context->f_ice_rf[0] = XPLMFindDataRef("sim/flightmodel/failures/pitot_ice")) ||
         NULL == (global_context->f_ice_rf[1] = XPLMFindDataRef("sim/flightmodel/failures/inlet_ice")) ||
         NULL == (global_context->f_ice_rf[2] = XPLMFindDataRef("sim/flightmodel/failures/prop_ice")) ||
@@ -268,6 +271,13 @@ PLUGIN_API int XPluginEnable(void)
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
+#endif // PUBLIC_RELEASE_BUILD
+
+    /* common datarefs */
+    if (NULL == (global_context->f_throttall = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio_all")))
+    {
+        XPLMDebugString("x-nullzones [error]: XPluginEnable failed (f_throt_all)\n"); goto fail;
+    }
 
     /* initialize arrays */
     memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
@@ -340,10 +350,12 @@ PLUGIN_API int XPluginEnable(void)
     return 1;
 
 fail:
+#ifndef PUBLIC_RELEASE_BUILD
     if (global_context->widgetid[0] != 0)
     {
         XPDestroyWidget(global_context->widgetid[0], 1);
     }
+#endif
     if (NULL != global_context)
     {
         free(global_context);
@@ -356,25 +368,27 @@ static void xnz_context_reset(xnz_context *ctx)
 {
     if (ctx)
     {
+#ifndef PUBLIC_RELEASE_BUILD
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_cb, 0, 1, ctx);
+        XPLMSetDataf(ctx->nullzone[0], ctx->prefs_nullzone[0]);
+        XPLMSetDataf(ctx->nullzone[1], ctx->prefs_nullzone[1]);
+        XPLMSetDataf(ctx->nullzone[2], ctx->prefs_nullzone[2]);
+        XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
+        if (XPIsWidgetVisible(ctx->widgetid[1]) != 0)
+        {
+            XPHideWidget(ctx->widgetid[0]);
+            XPHideWidget(ctx->widgetid[1]);
+        }
+#endif
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
         memset(ctx->f_servos, (int)NULL, sizeof(ctx->f_servos));
         memset(ctx->i_servos, (int)NULL, sizeof(ctx->i_servos));
         memset(ctx->i_autoth, (int)NULL, sizeof(ctx->i_autoth));
         memset(ctx->f_autoth, (int)NULL, sizeof(ctx->f_autoth));
-        XPLMSetDataf(ctx->nullzone[0], ctx->prefs_nullzone[0]);
-        XPLMSetDataf(ctx->nullzone[1], ctx->prefs_nullzone[1]);
-        XPLMSetDataf(ctx->nullzone[2], ctx->prefs_nullzone[2]);
-        XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
         if (ctx->idx_throttle_axis_1 >= 0)
         {
             int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
             XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
-        }
-        if (XPIsWidgetVisible(ctx->widgetid[1]) != 0)
-        {
-            XPHideWidget(ctx->widgetid[0]);
-            XPHideWidget(ctx->widgetid[1]);
         }
         ctx->i_context_init_done = 0;
         ctx->use_320ultimate_api = 0;
@@ -386,27 +400,14 @@ static void xnz_context_reset(xnz_context *ctx)
 
 PLUGIN_API void XPluginDisable(void)
 {
-    /* cleanup */
     xnz_context_reset(global_context);
 
-    /* flight loop callback */
+#ifndef PUBLIC_RELEASE_BUILD
     XPLMUnregisterFlightLoopCallback(global_context->f_l_cb, global_context);
-    XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
-
-    /* re-enable prop 3/4 axes */
-    if (global_context->idx_throttle_axis_1 >= 0)
-    {
-        int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
-        XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
-    }
-
-    /* reset nullzones to default/preferences values */
     XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
     XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
     XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
     XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
-
-    /* clean up our widgets */
     if (XPIsWidgetVisible(global_context->widgetid[1]) != 0)
     {
         XPHideWidget(global_context->widgetid[0]);
@@ -415,6 +416,16 @@ PLUGIN_API void XPluginDisable(void)
     if (global_context->widgetid[0] != 0)
     {
         XPDestroyWidget(global_context->widgetid[0], 1);
+    }
+#endif
+
+    XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
+
+    /* re-enable prop 3/4 axes */
+    if (global_context->idx_throttle_axis_1 >= 0)
+    {
+        int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
+        XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
     }
 
     /* close context */
@@ -449,10 +460,12 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     switch (inMessage)
     {
         case XPLM_MSG_WILL_WRITE_PREFS:
+#ifndef PUBLIC_RELEASE_BUILD
             XPLMSetDataf(global_context->nullzone[0], global_context->prefs_nullzone[0]);
             XPLMSetDataf(global_context->nullzone[1], global_context->prefs_nullzone[1]);
             XPLMSetDataf(global_context->nullzone[2], global_context->prefs_nullzone[2]);
             XPLMSetDataf(global_context->acf_roll_co, global_context->nominal_roll_coef);
+#endif
             if (global_context->idx_throttle_axis_1 >= 0)
             {
                 int pr_axis_ass[2] = { 26, 27, }; // TODO: throttle 1, 2 axes
@@ -481,6 +494,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             {
                 XPLMPluginID test = XPLM_NO_PLUGIN_ID;
 
+#ifndef PUBLIC_RELEASE_BUILD
                 global_context->minimum_null_zone = 0.04f; // hardcoded for now
                 global_context->nominal_roll_coef = XPLMGetDataf(global_context->acf_roll_co);
                 global_context->prefs_nullzone[0] = XPLMGetDataf(global_context->nullzone[0]);
@@ -491,7 +505,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->prefs_nullzone[1],
                         global_context->prefs_nullzone[2],
                         global_context->minimum_null_zone);
-
                 if (global_context->i_version_simulator < 11000)
                 {
                     float rc0; ACF_ROLL_SET(rc0, GROUNDSP_KTS_MIN, global_context->nominal_roll_coef);
@@ -500,6 +513,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     xnz_log("x-nullzones: new aircraft: original roll coefficient %.3lf (%.3lf -> %.3lf -> %.3lf)\n",
                             global_context->nominal_roll_coef, rc0, rc1, rc2);
                 }
+#endif
 
                 // check for all supported autopilot/servo/autothrottle datarefs
                 for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_dataref_names[i] != NULL && j < k; i++)
@@ -648,7 +662,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             global_context->tca_support_enabled == 0 ? "no" : "yes");
                 }
 
-                // init data, start flightloop callback
+#ifndef PUBLIC_RELEASE_BUILD
                 global_context->i_context_init_done = 1;
                 global_context->ice_detect_positive = 0;
                 global_context->icecheck_required = 0.0f;
@@ -656,6 +670,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 global_context->last_throttle_all = XPLMGetDataf(global_context->f_throttall);
                 XPLMSetFlightLoopCallbackInterval(global_context->f_l_cb, 1, 1, global_context);
                 return;
+#else
+                global_context->i_context_init_done = 1;
+                return;
+#endif
             }
             break;
 
@@ -664,6 +682,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
+#ifndef PUBLIC_RELEASE_BUILD
 static float callback_hdlr(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
                            int   inCounter,
@@ -898,6 +917,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
     XPLMDebugString("x-nullzones [error]: callback_hdlr: inRefcon == NULL, disabling callback");
     return 0;
 }
+#endif
 
 static inline float non_linear_standard(float linear_val)
 {
