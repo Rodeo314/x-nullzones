@@ -151,6 +151,7 @@ static float TCA_IDLE_CTR = 0.295f;
 static float TCA_CLMB_CTR = 0.515f;
 static float TCA_FLEX_CTR = 0.715f;
 static float TCA_DEADBAND = 0.040f;
+static float TCA_SYNCBAND = 0.070f;
 static xnz_context *global_context = NULL;
 
 static   int xnz_log       (const char *format, ...);
@@ -1154,7 +1155,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             }
             first_xplane_run = 0;
         }
-        if (fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_DEADBAND)
+        if (fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
         {
             symmetrical_thrust = 1;
         }
