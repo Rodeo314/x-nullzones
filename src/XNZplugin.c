@@ -685,7 +685,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         {
                             int th_axis_ass[2] = { 20, 21, };
                             xnz_log("[info]: releasing joystick axes (use_320ultimate_api)\n");
-                            XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
+                            XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
                         }
                         else
 #endif
