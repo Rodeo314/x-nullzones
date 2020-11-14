@@ -150,7 +150,7 @@ static int first_xplane_run = 1;
 static float TCA_IDLE_CTR = 0.295f;
 static float TCA_CLMB_CTR = 0.515f;
 static float TCA_FLEX_CTR = 0.715f;
-static float TCA_DEADBAND = 0.040f;
+static float TCA_DEADBAND = 0.035f;
 static float TCA_SYNCBAND = 0.070f;
 static xnz_context *global_context = NULL;
 
