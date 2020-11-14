@@ -414,8 +414,8 @@ static void xnz_context_reset(xnz_context *ctx)
         memset(ctx->f_autoth, (int)NULL, sizeof(ctx->f_autoth));
         if (ctx->idx_throttle_axis_1 >= 0)
         {
-            int pr_axis_ass[2] = { 20, 21, };
-            XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
+            int th_axis_ass[2] = { 20, 21, };
+            XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
         }
         ctx->i_context_init_done = 0;
         ctx->use_320ultimate_api = 0;
@@ -451,8 +451,8 @@ PLUGIN_API void XPluginDisable(void)
     /* re-enable throttle 1/2 axes */
     if (global_context->idx_throttle_axis_1 >= 0)
     {
-        int pr_axis_ass[2] = { 20, 21, };
-        XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
+        int th_axis_ass[2] = { 20, 21, };
+        XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
     }
 
     /* close context */
@@ -495,9 +495,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 #endif
             if (global_context->idx_throttle_axis_1 >= 0)
             {
-                int pr_axis_ass[2] = { 20, 21, };
+                int th_axis_ass[2] = { 20, 21, };
                 xnz_log("[info]: releasing joystick axes (XPLM_MSG_WILL_WRITE_PREFS)\n");
-                XPLMSetDatavi(global_context->i_stick_ass, pr_axis_ass, global_context->idx_throttle_axis_1, 2);
+                XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
             }
             return;
 
@@ -679,8 +679,20 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                     if (global_context->idx_throttle_axis_1 >= 0)
                     {
-                        int no_axis_ass[2] = { 0, 0, };
-                        XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
+#ifdef PUBLIC_RELEASE_BUILD
+                        // TODO: implement A320 API support
+                        if (global_context->use_320ultimate_api != 0)
+                        {
+                            int th_axis_ass[2] = { 20, 21, };
+                            xnz_log("[info]: releasing joystick axes (use_320ultimate_api)\n");
+                            XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
+                        }
+                        else
+#endif
+                        {
+                            int no_axis_ass[2] = { 0, 0, };
+                            XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
+                        }
                     }
                     global_context->skip_idle_overwrite = 0;
                     global_context->f_thr_tolis = global_context->f_thr_array;
@@ -1287,8 +1299,8 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
 #ifdef PUBLIC_RELEASE_BUILD
                     if (ctx->idx_throttle_axis_1 >= 0)
                     {
-                        int pr_axis_ass[2] = { 20, 21, };
-                        XPLMSetDatavi(ctx->i_stick_ass, pr_axis_ass, ctx->idx_throttle_axis_1, 2);
+                        int th_axis_ass[2] = { 20, 21, };
+                        XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
                     }
 #endif
                     XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_NoCheck);
