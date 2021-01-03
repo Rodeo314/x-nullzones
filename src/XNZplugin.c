@@ -1188,7 +1188,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                  * This allows simmers to use other means of controlling aircraft
                  * thrust when both TCA levers are set in an idle detent position.
                  */
-                if (ctx->i_propmode_value[0] > 1)
+                if (ctx->i_propmode_value[0] == 1 &&
+                    ctx->i_propmode_value[1] == 1)
                 {
                     ctx->skip_idle_overwrite++;
                 }
