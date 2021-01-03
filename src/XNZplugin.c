@@ -1159,6 +1159,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
 
         /* now we read the raw axis values */
         XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
+        XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
         if (first_xplane_run)
         {
             if (f_stick_val[0] < TCA_DEADBAND || f_stick_val[1] < TCA_DEADBAND)
@@ -1187,7 +1188,10 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                  * This allows simmers to use other means of controlling aircraft
                  * thrust when both TCA levers are set in an idle detent position.
                  */
-                ctx->skip_idle_overwrite++;
+                if (ctx->i_propmode_value[0] > 1)
+                {
+                    ctx->skip_idle_overwrite++;
+                }
             }
             else
             {
@@ -1208,7 +1212,6 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         if (symmetrical_thrust)
         {
-            XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 1);
             if (ctx->ddenn_cl300_detents)
             {
                 f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0]);
@@ -1234,7 +1237,6 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
             return (1.0f / 20.0f);
         }
-        XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
         if (ctx->ddenn_cl300_detents)
         {
             f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0]);
