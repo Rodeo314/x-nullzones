@@ -1057,6 +1057,11 @@ static inline float non_linear_centered(float linear_val)
     return 0.5f;
 }
 
+static inline float jitter_protection(float input)
+{
+    return roundf(input / 0.0025f) * 0.0025f;
+}
+
 static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
 {
     if (input < z.min[ZONE_REV])
@@ -1082,14 +1087,14 @@ static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return 2.4f / 3.0f * non_linear_centered(t);
+        return jitter_protection(2.4f / 3.0f * non_linear_centered(t));
     }
     if (input > z.max[ZONE_REV])
     {
         return 0.0f;
     }
     float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return 0.9f * non_linear_inverted(t) - 1.0f;
+    return jitter_protection(0.9f * non_linear_inverted(t) - 1.0f);
 }
 
 static inline float throttle_mapping_toliss(float input, thrust_zones z)
@@ -1117,14 +1122,14 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return 0.68f * non_linear_centered(t);
+        return jitter_protection(0.68f * non_linear_centered(t));
     }
     if (input > z.max[ZONE_REV])
     {
         return 0.0f;
     }
     float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return 0.9f * non_linear_inverted(t) - 1.0f;
+    return jitter_protection(0.9f * non_linear_inverted(t) - 1.0f);
 }
 
 static inline float throttle_mapping(float input, thrust_zones z)
@@ -1140,7 +1145,7 @@ static inline float throttle_mapping(float input, thrust_zones z)
     if (input > z.min[ZONE_TGA])
     {
         float t = ((input - z.min[ZONE_TGA]) / z.len[ZONE_TGA]);
-        return z.share[ZONE_TGA] * linear_standard(t) + z.share[ZONE_FLX] + z.share[ZONE_CLB];
+        return jitter_protection(z.share[ZONE_TGA] * linear_standard(t) + z.share[ZONE_FLX] + z.share[ZONE_CLB]);
     }
     if (input > z.max[ZONE_FLX])
     {
@@ -1149,7 +1154,7 @@ static inline float throttle_mapping(float input, thrust_zones z)
     if (input > z.min[ZONE_FLX])
     {
         float t = ((input - z.min[ZONE_FLX]) / z.len[ZONE_FLX]);
-        return z.share[ZONE_FLX] * linear_standard(t) + z.share[ZONE_CLB];
+        return jitter_protection(z.share[ZONE_FLX] * linear_standard(t) + z.share[ZONE_CLB]);
     }
     if (input > z.max[ZONE_CLB])
     {
@@ -1158,14 +1163,14 @@ static inline float throttle_mapping(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return z.share[ZONE_CLB] * linear_standard(t);
+        return jitter_protection(z.share[ZONE_CLB] * linear_standard(t));
     }
     if (input > z.max[ZONE_REV])
     {
         return 0.0f;
     }
     float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return 0.9f * non_linear_inverted(t) - 1.0f;
+    return jitter_protection(0.9f * non_linear_inverted(t) - 1.0f);
 }
 
 static float throttle_hdlr(float inElapsedSinceLastCall,
@@ -1175,7 +1180,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
 {
     if (inRefcon)
     {
-        float f_stick_val[2];
+        float f_stick_val[2], sum;
         xnz_context *ctx = inRefcon;
         int symmetrical_thrust = !ctx->asymmetrical_thrust;
 
@@ -1222,32 +1227,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         if (fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
         {
             symmetrical_thrust = 1;
-        }
-        if (symmetrical_thrust)
-        {
-            float addition = f_stick_val[0] + f_stick_val[1];
-            f_stick_val[0] = f_stick_val[1] = addition / 2.0f;
-            if (throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info) == 0.0f)
-            {
-                if (ctx->skip_idle_overwrite > 9)
-                {
-                    return (1.0f / 20.0f);
-                }
-                /*
-                 * Don't keep writing idle thrust over and over again.
-                 * This allows simmers to use other means of controlling aircraft
-                 * thrust when both TCA levers are set in an idle detent position.
-                 */
-                if (ctx->i_propmode_value[0] == 1 &&
-                    ctx->i_propmode_value[1] == 1)
-                {
-                    ctx->skip_idle_overwrite++;
-                }
-            }
-            else
-            {
-                ctx->skip_idle_overwrite = 0;
-            }
+            sum = f_stick_val[0] + f_stick_val[1];
+            f_stick_val[0] = f_stick_val[1] = sum / 2.0f;
         }
         if (ctx->use_320ultimate_api > 0)
         {
@@ -1258,9 +1239,28 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         if (ctx->f_thr_tolis)
         {
-            if (symmetrical_thrust && fabsf(XPLMGetDataf(ctx->f_throttall) - throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info)) < 0.0025f)
+            if (symmetrical_thrust)
             {
-                return (1.0f / 20.0f); // don't overwrite with same value
+                f_stick_val[0] = f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
+                if (0.0f == f_stick_val[0] && ctx->i_propmode_value[0] == 1 && ctx->i_propmode_value[1] == 1)
+                {
+                    /*
+                     * Don't keep writing idle thrust over and over again.
+                     * This allows simmers to use other means of controlling aircraft
+                     * thrust when both TCA levers are set in an idle detent position.
+                     */
+                    if (ctx->skip_idle_overwrite > 9)
+                    {
+                        return (1.0f / 20.0f);
+                    }
+                    ctx->skip_idle_overwrite++;
+                }
+                else
+                {
+                    ctx->skip_idle_overwrite = 0;
+                }
+                XPLMSetDatavf(ctx->f_thr_tolis, f_stick_val, 0, 2);
+                return (1.0f / 20.0f);
             }
             f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
             f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1], ctx->zones_info);
@@ -1291,9 +1291,22 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                     XPLMCommandOnce(ctx->rev_togg);
                 }
             }
-            if (fabsf(XPLMGetDataf(ctx->f_throttall) - fabsf(f_stick_val[0])) < 0.0025f)
+            if (0.0f == f_stick_val[0] && ctx->i_propmode_value[0] == 1 && ctx->i_propmode_value[1] == 1)
             {
-                return (1.0f / 20.0f); // don't overwrite with same value
+                /*
+                 * Don't keep writing idle thrust over and over again.
+                 * This allows simmers to use other means of controlling aircraft
+                 * thrust when both TCA levers are set in an idle detent position.
+                 */
+                if (ctx->skip_idle_overwrite > 9)
+                {
+                    return (1.0f / 20.0f);
+                }
+                ctx->skip_idle_overwrite++;
+            }
+            else
+            {
+                ctx->skip_idle_overwrite = 0;
             }
             XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
             return (1.0f / 20.0f);
