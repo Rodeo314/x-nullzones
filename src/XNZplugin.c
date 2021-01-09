@@ -65,6 +65,26 @@
     }                                                          \
 }
 
+enum
+{
+    ZONE_REV = 0,
+    ZONE_CLB = 1,
+    ZONE_FLX = 2,
+    ZONE_TGA = 3,
+    ZONE_MAX = ZONE_TGA,
+};
+
+typedef struct
+{
+    /*
+     * TODO: future: function pointer to default linear/non-linear mapping function based on user preference???
+     */
+    float   min[ZONE_MAX + 1];
+    float   max[ZONE_MAX + 1];
+    float   len[ZONE_MAX + 1];
+    float share[ZONE_MAX + 1];
+} thrust_zones;
+
 typedef struct
 {
 #ifndef PUBLIC_RELEASE_BUILD
@@ -121,6 +141,7 @@ typedef struct
     int id_menu_item_on_off;
     int tca_support_enabled;
     int skip_idle_overwrite;
+    thrust_zones zones_info;
 }
 xnz_context;
 
@@ -147,17 +168,12 @@ static const char *f_autot_dataref_names[] =
 };
 
 static int first_xplane_run = 1;
-static float TCA_IDLE_CTR = 0.295f;
-static float TCA_CLMB_CTR = 0.515f;
-static float TCA_FLEX_CTR = 0.715f;
-static float TCA_DEADBAND = 0.035f;
-static float TCA_SYNCBAND = 0.070f;
 static xnz_context *global_context = NULL;
 
-static   int xnz_log       (const char *format, ...);
-static float throttle_hdlr(float, float, int, void*);
-static void  menu_hdlr_fnc(void*,             void*);
-static inline float throttle_mapping(float rawvalue);
+static int               xnz_log(const char *format, ...);
+static float      throttle_hdlr(float, float, int, void*);
+static void       menu_hdlr_fnc(void*,             void*);
+static inline float throttle_mapping(float, thrust_zones);
 
 #ifndef PUBLIC_RELEASE_BUILD
 static float callback_hdlr(float, float, int, void*);
@@ -220,6 +236,44 @@ static int xnz_log(const char *format, ...)
 PLUGIN_API void XPluginStop(void)
 {
     return;
+}
+
+static float TCA_IDLE_CTR = 0.295f;
+static float TCA_CLMB_CTR = 0.515f;
+static float TCA_FLEX_CTR = 0.715f;
+static float TCA_DEADBAND = 0.035f;
+static float TCA_SYNCBAND = 0.070f;
+
+static void update_thrust_zones(thrust_zones *info)
+{
+    if (info)
+    {
+        /*
+         * Re-compute zones based on the center of each hardware detent.
+         */
+        info->max[ZONE_TGA] = (                      1.0f - TCA_DEADBAND); // default: 0.965f
+        info->min[ZONE_TGA] = (              TCA_FLEX_CTR + TCA_DEADBAND); // default: 0.750f
+        info->max[ZONE_FLX] = (              TCA_FLEX_CTR - TCA_DEADBAND); // default: 0.680f
+        info->min[ZONE_FLX] = (              TCA_CLMB_CTR + TCA_DEADBAND); // default: 0.550f
+        info->max[ZONE_CLB] = (              TCA_CLMB_CTR - TCA_DEADBAND); // default: 0.480f
+        info->min[ZONE_CLB] = (              TCA_IDLE_CTR + TCA_DEADBAND); // default: 0.330f
+        info->max[ZONE_REV] = (              TCA_IDLE_CTR - TCA_DEADBAND); // default: 0.260f
+        info->min[ZONE_REV] = (                      0.0f + TCA_DEADBAND); // default: 0.035f
+        info->len[ZONE_TGA] = (info->max[ZONE_TGA] - info->min[ZONE_TGA]); // default: 0.215f
+        info->len[ZONE_FLX] = (info->max[ZONE_FLX] - info->min[ZONE_FLX]); // default: 0.130f
+        info->len[ZONE_CLB] = (info->max[ZONE_CLB] - info->min[ZONE_CLB]); // default: 0.150f
+        info->len[ZONE_REV] = (info->max[ZONE_REV] - info->min[ZONE_REV]); // default: 0.225f
+
+        /*
+         * TODO: future: based on user preference?
+         */
+//      info->share[ZONE_CLB] = (sqrtf(1.0f / 3.0f));
+//      info->share[ZONE_FLX] = (sqrtf(2.0f / 3.0f) - info->share[ZONE_CLB]);
+//      info->share[ZONE_TGA] = (1.0f - info->share[ZONE_FLX] - info->share[ZONE_CLB]);
+        info->share[ZONE_CLB] = (1.0f / 2.0f);
+        info->share[ZONE_FLX] = (1.0f / 3.0f);
+        info->share[ZONE_TGA] = (1.0f / 6.0f);
+    }
 }
 
 PLUGIN_API int XPluginEnable(void)
@@ -361,6 +415,9 @@ PLUGIN_API int XPluginEnable(void)
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (XPLMAppendMenuItem)\n"); goto fail;
     }
     XPLMCheckMenuItem(global_context->id_th_on_off, global_context->id_menu_item_on_off, xplm_Menu_Checked);
+
+    /* initialize detents, corresponding zone data */
+    update_thrust_zones(&global_context->zones_info);
 
     /* all good */
     XPLMDebugString(XNZ_LOG_PREFIX"[info]: XPluginEnable OK\n");
@@ -634,7 +691,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         };
                         for (int i = 0; i <= 200; i++)
                         {
-                            float input, value = throttle_mapping((input = ((float)i / 200.0f)));
+                            float input, value = throttle_mapping((input = ((float)i / 200.0f)), global_context->zones_info);
                             if (value < last)
                             {
                                 xnz_log("[debug]: non-monotonically increasing throttle mapping, %.4f -> %.4f\n", last, value);
@@ -960,6 +1017,11 @@ static float callback_hdlr(float inElapsedSinceLastCall,
 }
 #endif
 
+static inline float linear_standard(float linear_val)
+{
+    return linear_val;
+}
+
 static inline float non_linear_standard(float linear_val)
 {
     return sqrtf(linear_val);
@@ -995,126 +1057,115 @@ static inline float non_linear_centered(float linear_val)
     return 0.5f;
 }
 
-static inline float throttle_mapping_ddcl30(float rawvalue)
+static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
 {
-    if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
+    if (input < z.min[ZONE_REV])
     {
-        if (rawvalue < TCA_DEADBAND)
-        {
-            return -1.0f;
-        }
-        float min = TCA_DEADBAND;
-        float max = TCA_IDLE_CTR - TCA_DEADBAND;
-        float val = (rawvalue - min) / (max - min);
-        return 0.9f * non_linear_inverted(val) - 1.0f;
+        return -1.0f; // max reverse
     }
-    if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
+    if (input > z.min[ZONE_TGA])
     {
         return 2.8f / 3.0f; // TO
     }
-    if (rawvalue > (TCA_CLMB_CTR + 0.5f * (TCA_FLEX_CTR - TCA_CLMB_CTR)))
+//  if (input > z.max[ZONE_FLX])
+//  {
+//      return 2.6f / 3.0f; // CL
+//  }
+    if (input > z.min[ZONE_FLX])
     {
-        return 2.6f / 3.0f; // CLB
+        return 2.6f / 3.0f; // CL
     }
-    if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
+    if (input > z.max[ZONE_CLB])
     {
-        return 2.5f / 3.0f; // CRZ
+        return 2.5f / 3.0f; // CR
     }
-    if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
+    if (input > z.min[ZONE_CLB])
     {
-        float mx = TCA_CLMB_CTR - TCA_DEADBAND;
-        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
-        float ve = (rawvalue - mn) / (mx - mn);
-        return 2.4f / 3.0f * non_linear_centered(ve);
+        float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
+        return 2.4f / 3.0f * non_linear_centered(t);
     }
-    return 0.0f; // default to forward idle
+    if (input > z.max[ZONE_REV])
+    {
+        return 0.0f;
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return 0.9f * non_linear_inverted(t) - 1.0f;
 }
 
-static inline float throttle_mapping_toliss(float rawvalue)
+static inline float throttle_mapping_toliss(float input, thrust_zones z)
 {
-    if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
+    if (input < z.min[ZONE_REV])
     {
-        if (rawvalue < TCA_DEADBAND)
-        {
-            return -1.0f;
-        }
-        float min = TCA_DEADBAND;
-        float max = TCA_IDLE_CTR - TCA_DEADBAND;
-        float val = (rawvalue - min) / (max - min);
-        return 0.9f * non_linear_inverted(val) - 1.0f;
+        return -1.0f; // max reverse
     }
-    if (rawvalue > (TCA_FLEX_CTR + 0.5f * (1.0f - TCA_DEADBAND - TCA_FLEX_CTR)))
+    if (input > z.min[ZONE_TGA])
     {
-        return 1.00f; // TOGA
+        return 1.0f; // TO/GA
     }
-    if (rawvalue > (TCA_CLMB_CTR + 0.5f * (TCA_FLEX_CTR - TCA_CLMB_CTR)))
+//  if (input > z.max[ZONE_FLX])
+//  {
+//      return 0.87f; // FLEX
+//  }
+    if (input > z.min[ZONE_FLX])
     {
         return 0.87f; // FLEX
     }
-    if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
+    if (input > z.max[ZONE_CLB])
     {
         return 0.69f; // CLB
     }
-    if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
+    if (input > z.min[ZONE_CLB])
     {
-        float mx = TCA_CLMB_CTR - TCA_DEADBAND;
-        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
-        float ve = (rawvalue - mn) / (mx - mn);
-        return 0.68f * non_linear_centered(ve);
+        float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
+        return 0.68f * non_linear_centered(t);
     }
-    return 0.0f; // default to forward idle
+    if (input > z.max[ZONE_REV])
+    {
+        return 0.0f;
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return 0.9f * non_linear_inverted(t) - 1.0f;
 }
 
-/* ******* Example: mappings ******* *
- *************************************
- ** IDLE *** CLMB *** FLEX *** TOGA **
- *************************************
- * 0.000f | linear | 0.750f | 1.000f *
- * 0.000f | 0.700f | linear | 1.000f *
- * 0.000f | 0.750f | linear | 1.000f *
- * 0.000f | linear | 0.875f | 1.000f *
- * 0.000f | 0.500f | curved | 1.000f * <------
- *************************************
- */
-static inline float throttle_mapping(float rawvalue)
+static inline float throttle_mapping(float input, thrust_zones z)
 {
-#if 0
-    return throttle_mapping_toliss(rawvalue); // debug
-#endif
-    if (rawvalue <= (TCA_IDLE_CTR - TCA_DEADBAND))
+    if (input < z.min[ZONE_REV])
     {
-        if (rawvalue < TCA_DEADBAND)
-        {
-            return -1.0f;
-        }
-        float min = TCA_DEADBAND;
-        float max = TCA_IDLE_CTR - TCA_DEADBAND;
-        float val = (rawvalue - min) / (max - min);
-        return 0.9f * non_linear_inverted(val) - 1.0f;
+        return -1.0f; // max reverse
     }
-    if (rawvalue > (1.0f - TCA_DEADBAND))
+    if (input > z.max[ZONE_TGA])
     {
-        return 1.0f;
+        return 1.00f; // max forward
     }
-    if (rawvalue > (TCA_CLMB_CTR + TCA_DEADBAND))
+    if (input > z.min[ZONE_TGA])
     {
-        float mx = 1.0f - TCA_DEADBAND;
-        float mn = TCA_CLMB_CTR + TCA_DEADBAND;
-        float ve = (rawvalue - mn) / (mx - mn);
-        return 0.5f + 0.5f * non_linear_standard(ve);
+        float t = ((input - z.min[ZONE_TGA]) / z.len[ZONE_TGA]);
+        return z.share[ZONE_TGA] * linear_standard(t) + z.share[ZONE_FLX] + z.share[ZONE_CLB];
     }
-    if (rawvalue > (TCA_CLMB_CTR - TCA_DEADBAND))
+    if (input > z.max[ZONE_FLX])
     {
-        return 0.5f; // wide detent at 50% thrust
+        return z.share[ZONE_FLX] + z.share[ZONE_CLB];
     }
-    if (rawvalue > (TCA_IDLE_CTR + TCA_DEADBAND))
+    if (input > z.min[ZONE_FLX])
     {
-        float mx = TCA_CLMB_CTR - TCA_DEADBAND;
-        float mn = TCA_IDLE_CTR + TCA_DEADBAND;
-        float ve = (rawvalue - mn) / (mx - mn);
-        return 0.5f * non_linear_inverted(ve);
+        float t = ((input - z.min[ZONE_FLX]) / z.len[ZONE_FLX]);
+        return z.share[ZONE_FLX] * linear_standard(t) + z.share[ZONE_CLB];
     }
-    return 0.0f; // default to forward idle
+    if (input > z.max[ZONE_CLB])
+    {
+        return z.share[ZONE_CLB];
+    }
+    if (input > z.min[ZONE_CLB])
+    {
+        float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
+        return z.share[ZONE_CLB] * linear_standard(t);
+    }
+    if (input > z.max[ZONE_REV])
+    {
+        return 0.0f;
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return 0.9f * non_linear_inverted(t) - 1.0f;
 }
 
 static float throttle_hdlr(float inElapsedSinceLastCall,
@@ -1175,9 +1226,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         if (symmetrical_thrust)
         {
             float addition = f_stick_val[0] + f_stick_val[1];
-            f_stick_val[0] = addition / 2.0f;
-            f_stick_val[1] = f_stick_val[0];
-            if (throttle_mapping(1.0f - f_stick_val[0]) == 0.0f)
+            f_stick_val[0] = f_stick_val[1] = addition / 2.0f;
+            if (throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info) == 0.0f)
             {
                 if (ctx->skip_idle_overwrite > 9)
                 {
@@ -1201,13 +1251,19 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         if (ctx->use_320ultimate_api > 0)
         {
+            /*
+             * use the A320's native API to check the thrust levers' positions and X-Plane thrust up/down commands to move said levers up or down???
+             */
             return (1.0f / 20.0f); // TODO: implement
         }
         if (ctx->f_thr_tolis)
         {
-            // note: A350 reverse thrust only works with X-Plane 11 (v1.6+)…
-            f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0]);
-            f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1]);
+            if (symmetrical_thrust && fabsf(XPLMGetDataf(ctx->f_throttall) - throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info)) < 0.0025f)
+            {
+                return (1.0f / 20.0f); // don't overwrite with same value
+            }
+            f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
+            f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1], ctx->zones_info);
             XPLMSetDatavf(ctx->f_thr_tolis, f_stick_val, 0, 2);
             return (1.0f / 20.0f);
         }
@@ -1215,11 +1271,11 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         {
             if (ctx->ddenn_cl300_detents)
             {
-                f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0]);
+                f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
             }
             else
             {
-                f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
+                f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
             }
             if (f_stick_val[0] < 0.0f)
             {
@@ -1235,18 +1291,22 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                     XPLMCommandOnce(ctx->rev_togg);
                 }
             }
+            if (fabsf(XPLMGetDataf(ctx->f_throttall) - fabsf(f_stick_val[0])) < 0.0025f)
+            {
+                return (1.0f / 20.0f); // don't overwrite with same value
+            }
             XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
             return (1.0f / 20.0f);
         }
         if (ctx->ddenn_cl300_detents)
         {
-            f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0]);
-            f_stick_val[1] = throttle_mapping_ddcl30(1.0f - f_stick_val[1]);
+            f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
+            f_stick_val[1] = throttle_mapping_ddcl30(1.0f - f_stick_val[1], ctx->zones_info);
         }
         else
         {
-            f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0]);
-            f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1]);
+            f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
+            f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1], ctx->zones_info);
         }
         if (f_stick_val[0] < 0.0f)
         {
