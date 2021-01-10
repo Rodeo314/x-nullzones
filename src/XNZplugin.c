@@ -1094,7 +1094,7 @@ static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
         return 0.0f;
     }
     float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return jitter_protection(0.9f * non_linear_inverted(t) - 1.0f);
+    return jitter_protection(0.9f * non_linear_standard(non_linear_standard(non_linear_standard(t))) - 1.0f);
 }
 
 static inline float throttle_mapping_toliss(float input, thrust_zones z)
@@ -1129,7 +1129,7 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
         return 0.0f;
     }
     float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return jitter_protection(0.9f * non_linear_inverted(t) - 1.0f);
+    return jitter_protection(0.9f * non_linear_standard(non_linear_standard(non_linear_standard(t))) - 1.0f);
 }
 
 static inline float throttle_mapping(float input, thrust_zones z)
@@ -1170,7 +1170,7 @@ static inline float throttle_mapping(float input, thrust_zones z)
         return 0.0f;
     }
     float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return jitter_protection(0.9f * non_linear_inverted(t) - 1.0f);
+    return jitter_protection(0.9f * non_linear_standard(non_linear_standard(non_linear_standard(t))) - 1.0f);
 }
 
 static float throttle_hdlr(float inElapsedSinceLastCall,
@@ -1180,8 +1180,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
 {
     if (inRefcon)
     {
-        float f_stick_val[2], sum;
         xnz_context *ctx = inRefcon;
+        float f_stick_val[2], f_thr_tolis[2], sum;
         int symmetrical_thrust = !ctx->asymmetrical_thrust;
 
         /* shall we be doing something? */
@@ -1224,7 +1224,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             }
             first_xplane_run = 0;
         }
-        if (fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
+        if (symmetrical_thrust || fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
         {
             symmetrical_thrust = 1;
             sum = f_stick_val[0] + f_stick_val[1];
@@ -1242,7 +1242,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             if (symmetrical_thrust)
             {
                 f_stick_val[0] = f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
-                if (0.0f == f_stick_val[0] && ctx->i_propmode_value[0] == 1 && ctx->i_propmode_value[1] == 1)
+                if (0.0f == f_stick_val[0])
                 {
                     /*
                      * Don't keep writing idle thrust over and over again.
@@ -1253,7 +1253,18 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                     {
                         return (1.0f / 20.0f);
                     }
-                    ctx->skip_idle_overwrite++;
+                    else
+                    {
+                        XPLMGetDatavf(ctx->f_thr_tolis, f_thr_tolis, 0, 2);
+                    }
+                    if (f_thr_tolis[0] >= 0.0f && f_thr_tolis[1] >= 0.0f)
+                    {
+                        ctx->skip_idle_overwrite++;
+                    }
+                    else
+                    {
+                        ctx->skip_idle_overwrite = 0;
+                    }
                 }
                 else
                 {
@@ -1291,7 +1302,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                     XPLMCommandOnce(ctx->rev_togg);
                 }
             }
-            if (0.0f == f_stick_val[0] && ctx->i_propmode_value[0] == 1 && ctx->i_propmode_value[1] == 1)
+            if (0.0f == f_stick_val[0])
             {
                 /*
                  * Don't keep writing idle thrust over and over again.
@@ -1302,7 +1313,14 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                 {
                     return (1.0f / 20.0f);
                 }
-                ctx->skip_idle_overwrite++;
+                if (ctx->i_propmode_value[0] == 1 && ctx->i_propmode_value[1] == 1)
+                {
+                    ctx->skip_idle_overwrite++;
+                }
+                else
+                {
+                    ctx->skip_idle_overwrite = 0;
+                }
             }
             else
             {
