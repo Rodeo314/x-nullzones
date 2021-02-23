@@ -1064,10 +1064,6 @@ static inline float jitter_protection(float input)
 
 static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
 {
-    if (input < z.min[ZONE_REV])
-    {
-        return -1.0f; // max reverse
-    }
     if (input > z.min[ZONE_TGA])
     {
         return 2.8f / 3.0f; // TO
@@ -1093,16 +1089,15 @@ static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
     {
         return 0.0f;
     }
-    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return jitter_protection(0.9f * non_linear_standard(non_linear_standard(non_linear_standard(t))) - 1.0f);
+    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 2.0f)))
+    {
+        return -1.0f; // max reverse
+    }
+    return -0.125f; // idle reverse
 }
 
 static inline float throttle_mapping_toliss(float input, thrust_zones z)
 {
-    if (input < z.min[ZONE_REV])
-    {
-        return -1.0f; // max reverse
-    }
     if (input > z.min[ZONE_TGA])
     {
         return 1.0f; // TO/GA
@@ -1128,16 +1123,15 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
     {
         return 0.0f;
     }
-    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return jitter_protection(0.9f * non_linear_standard(non_linear_standard(non_linear_standard(t))) - 1.0f);
+    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 2.0f)))
+    {
+        return -1.0f; // max reverse
+    }
+    return -0.125f; // idle reverse
 }
 
 static inline float throttle_mapping(float input, thrust_zones z)
 {
-    if (input < z.min[ZONE_REV])
-    {
-        return -1.0f; // max reverse
-    }
     if (input > z.max[ZONE_TGA])
     {
         return 1.00f; // max forward
@@ -1169,8 +1163,11 @@ static inline float throttle_mapping(float input, thrust_zones z)
     {
         return 0.0f;
     }
-    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
-    return jitter_protection(0.9f * non_linear_standard(non_linear_standard(non_linear_standard(t))) - 1.0f);
+    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 2.0f)))
+    {
+        return -1.0f; // max reverse
+    }
+    return -0.125f; // idle reverse
 }
 
 static float throttle_hdlr(float inElapsedSinceLastCall,
