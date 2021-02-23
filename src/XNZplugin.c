@@ -1330,7 +1330,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             {
                 f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
             }
-            if (f_stick_val[0] < 0.0f)
+            // TODO: implement: Beta thrust support!!!
+            if (ctx->acft_has_rev_thrust && f_stick_val[0] < 0.0f)
             {
                 if (ctx->i_propmode_value[0] < 3)
                 {
@@ -1339,6 +1340,10 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             }
             else
             {
+                if (f_stick_val[0] < 0.0f)
+                {
+                    f_stick_val[0] = 0.0f;
+                }
                 if (ctx->i_propmode_value[0] > 1)
                 {
                     XPLMCommandOnce(ctx->rev_togg);
@@ -1381,7 +1386,8 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
             f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1], ctx->zones_info);
         }
-        if (f_stick_val[0] < 0.0f)
+        // TODO: implement: Beta thrust support!!!
+        if (ctx->acft_has_rev_thrust && f_stick_val[0] < 0.0f)
         {
             if (ctx->i_propmode_value[0] < 3)
             {
@@ -1390,12 +1396,16 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         else
         {
+            if (f_stick_val[0] < 0.0f)
+            {
+                f_stick_val[0] = 0.0f;
+            }
             if (ctx->i_propmode_value[0] > 1)
             {
                 XPLMCommandOnce(ctx->rev_tog1);
             }
         }
-        if (f_stick_val[1] < 0.0f)
+        if (ctx->acft_has_rev_thrust && f_stick_val[1] < 0.0f)
         {
             if (ctx->i_propmode_value[1] < 3)
             {
@@ -1404,6 +1414,10 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         else
         {
+            if (f_stick_val[1] < 0.0f)
+            {
+                f_stick_val[1] = 0.0f;
+            }
             if (ctx->i_propmode_value[1] > 1)
             {
                 XPLMCommandOnce(ctx->rev_tog2);
