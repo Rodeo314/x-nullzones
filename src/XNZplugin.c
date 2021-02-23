@@ -129,9 +129,12 @@ typedef struct
     XPLMDataRef i_prop_mode;
     XPLMDataRef i_ngine_num;
     XPLMDataRef i_ngine_typ;
+    XPLMDataRef rev_info[3];
     XPLMCommandRef rev_togg;
     XPLMCommandRef rev_tog1;
     XPLMCommandRef rev_tog2;
+    int acft_has_rev_thrust;
+    int acf_has_beta_thrust;
     int i_propmode_value[2];
     int idx_throttle_axis_1;
     int asymmetrical_thrust;
@@ -390,6 +393,18 @@ PLUGIN_API int XPluginEnable(void)
     if (NULL == (global_context->i_ngine_typ = XPLMFindDataRef("sim/aircraft/prop/acf_en_type")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (i_ngine_typ)\n"); goto fail;
+    }
+    if (NULL == (global_context->rev_info[0] = XPLMFindDataRef("sim/aircraft/overflow/acf_has_beta")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_info[0])\n"); goto fail;
+    }
+    if (NULL == (global_context->rev_info[1] = XPLMFindDataRef("sim/aircraft/prop/acf_revthrust_eq")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_info[1])\n"); goto fail;
+    }
+    if (NULL == (global_context->rev_info[2] = XPLMFindDataRef("sim/aircraft/engine/acf_throtmax_REV")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_info[2])\n"); goto fail;
     }
     if (NULL == (global_context->rev_togg = XPLMFindCommand("sim/engines/thrust_reverse_toggle")))
     {
@@ -734,6 +749,29 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     {
                         global_context->asymmetrical_thrust = 0;
                     }
+                    switch (acf_en_type[0])
+                    {
+                        case 2: // turboprop
+                        case 8: // turboprop
+                            global_context->acf_has_beta_thrust = XPLMGetDatai(global_context->rev_info[0]) != 0;
+                            global_context->acft_has_rev_thrust =
+                            (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
+                             XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
+                            break;
+
+                        case 4: // turbojet
+                        case 5: // turbofan
+                            global_context->acf_has_beta_thrust = 0;
+                            global_context->acft_has_rev_thrust =
+                            (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
+                             XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
+                            break;
+
+                        default:
+                            global_context->acf_has_beta_thrust = 0;
+                            global_context->acft_has_rev_thrust = 0;
+                            break;
+                    }
                     if (global_context->idx_throttle_axis_1 >= 0)
                     {
 #ifdef PUBLIC_RELEASE_BUILD
@@ -756,6 +794,13 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
                     xnz_log("setting TCA flight loop callback interval (enabled: %s)\n",
                             global_context->tca_support_enabled == 0 ? "no" : "yes");
+                    xnz_log("engine type %d beta %d (%d) reverse %d (%d, %f)\n",
+                            acf_en_type[0],
+                            global_context->acf_has_beta_thrust,
+                            XPLMGetDatai(global_context->rev_info[0]),
+                            global_context->acft_has_rev_thrust,
+                            XPLMGetDatai(global_context->rev_info[1]),
+                            XPLMGetDataf(global_context->rev_info[2]));
                 }
 
 #ifndef PUBLIC_RELEASE_BUILD
