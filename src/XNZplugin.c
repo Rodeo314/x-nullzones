@@ -1089,7 +1089,7 @@ static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
     {
         return 0.0f;
     }
-    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 2.0f)))
+    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 20.0f)))
     {
         return -1.0f; // max reverse
     }
@@ -1123,7 +1123,7 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
     {
         return 0.0f;
     }
-    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 2.0f)))
+    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 20.0f)))
     {
         return -1.0f; // max reverse
     }
@@ -1163,7 +1163,7 @@ static inline float throttle_mapping(float input, thrust_zones z)
     {
         return 0.0f;
     }
-    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 2.0f)))
+    if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 20.0f)))
     {
         return -1.0f; // max reverse
     }
