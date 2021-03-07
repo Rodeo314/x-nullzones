@@ -981,7 +981,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             if (ctx->throttle_did_change)
             {
-                if (ctx->tca_support_enabled &&
+                if (first_xplane_run == 0 &&
+                    ctx->tca_support_enabled != 0 &&
                     ctx->idx_throttle_axis_1 >= 0 &&
                     ctx->skip_idle_overwrite == 0)
                 {
