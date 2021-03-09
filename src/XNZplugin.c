@@ -107,25 +107,38 @@ typedef struct
     XPWidgetID  widgetid[2];
 #endif
 
+    enum
+    {
+        XNZ_TT_SKIP =  -1,
+        XNZ_TT_XPLM =   0,
+        XNZ_TT_DDCL = 300,
+        XNZ_TT_FF32 = 320,
+        XNZ_TT_TOLI = 321,
+        XNZ_TT_TBM9 = 900,
+    } xnz_tt;
+
+    union
+    {
+        struct
+        {
+            SharedValuesInterface s;
+            int id_f32_eng_lever_lt;
+            int id_f32_eng_lever_rt;
+            int api_has_initialized;
+        } ff32;
+
+        struct
+        {
+            XPLMDataRef f_thr_array;
+        } toli;
+    };
+
     int i_context_init_done;
     int i_version_simulator;
     int i_version_xplm_apis;
-    XPLMDataRef f_servos[9];
-    XPLMDataRef i_servos[9];
-    XPLMDataRef i_autoth[9];
-    XPLMDataRef f_autoth[9];
-    XPLMDataRef f_thr_array;
-    XPLMDataRef f_throttall;
-    int use_320ultimate_api;
-    SharedValuesInterface s;
-    int id_f32_eng_lever_lt;
-    int id_f32_eng_lever_rt;
-
     XPLMFlightLoop_f f_l_th;
     XPLMDataRef i_stick_ass;
     XPLMDataRef f_stick_val;
-    XPLMDataRef f_thr_gener;
-    XPLMDataRef f_thr_tolis;
     XPLMDataRef i_prop_mode;
     XPLMDataRef i_ngine_num;
     XPLMDataRef i_ngine_typ;
@@ -138,7 +151,12 @@ typedef struct
     int i_propmode_value[2];
     int idx_throttle_axis_1;
     int asymmetrical_thrust;
-    int ddenn_cl300_detents;
+    XPLMDataRef f_throttall;
+    XPLMDataRef f_thr_array;
+    XPLMDataRef f_servos[9];
+    XPLMDataRef i_servos[9];
+    XPLMDataRef i_autoth[9];
+    XPLMDataRef f_autoth[9];
 
     XPLMMenuID id_th_on_off;
     int id_menu_item_on_off;
@@ -378,7 +396,7 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_stick_val)\n"); goto fail;
     }
-    if (NULL == (global_context->f_thr_gener = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio")))
+    if (NULL == (global_context->f_thr_array = XPLMFindDataRef("sim/cockpit2/engine/actuators/throttle_ratio")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_thr_array)\n"); goto fail;
     }
@@ -442,10 +460,7 @@ PLUGIN_API int XPluginEnable(void)
     global_context->tca_support_enabled = 1;
     global_context->skip_idle_overwrite = 0;
     global_context->i_context_init_done = 0;
-    global_context->use_320ultimate_api = 0;
-    global_context->ddenn_cl300_detents = 0;
-    global_context->f_thr_array = NULL;
-    global_context->f_thr_tolis = NULL;
+    global_context->xnz_tt = XNZ_TT_SKIP;
     return 1;
 
 fail:
@@ -490,10 +505,8 @@ static void xnz_context_reset(xnz_context *ctx)
             XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
         }
         ctx->i_context_init_done = 0;
-        ctx->use_320ultimate_api = 0;
-        ctx->ddenn_cl300_detents = 0;
         ctx->skip_idle_overwrite = 0;
-        ctx->f_thr_array = NULL;
+        ctx->xnz_tt = XNZ_TT_SKIP;
     }
 }
 
@@ -644,10 +657,15 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                 }
 
-                // check for custom throttle datarefs/API
+                /* check for custom thrust datarefs/API */
+                if (global_context->xnz_tt == XNZ_TT_SKIP)
+                {
+                    global_context->xnz_tt = XNZ_TT_XPLM; // assume default X-Plane until proven otherwise
+                }
                 if ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(XPLM_FF_SIGNATURE))) && (XPLMIsPluginEnabled(test)))
                 {
-                    global_context->use_320ultimate_api = -1;
+                    global_context->xnz_tt = XNZ_TT_FF32;
+                    global_context->ff32.api_has_initialized = 0;
                 }
                 else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))) ||
@@ -656,7 +674,14 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(   "ToLiSs.Airbus.systems"))) && (XPLMIsPluginEnabled(test))) || // A350v1.4.8
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.6++
                 {
-                    global_context->f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input");
+                    if (NULL != (global_context->toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input")))
+                    {
+                        global_context->xnz_tt = XNZ_TT_TOLI;
+                    }
+                    else
+                    {
+                        global_context->xnz_tt = XNZ_TT_SKIP;
+                    }
                 }
                 else if (XPLM_NO_PLUGIN_ID != XPLMFindPluginBySignature("1-sim.sasl"))
                 {
@@ -673,12 +698,13 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                                 if (!strncasecmp(auth, "Denis 'ddenn' Krupin", strlen("Denis 'ddenn' Krupin")) &&
                                     !strncasecmp(desc, "Bombardier Challenger 300", strlen("Bombardier Challenger 300")))
                                 {
-                                    global_context->ddenn_cl300_detents = 1;
+                                    global_context->xnz_tt = XNZ_TT_DDCL;
                                 }
                             }
                         }
                     }
                 }
+                xnz_log("determined throttle type %d\n", global_context->xnz_tt);
 
                 /* TCA thrust quadrant support */
                 if (global_context->idx_throttle_axis_1 < 0)
@@ -776,10 +802,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     {
 #ifdef PUBLIC_RELEASE_BUILD
                         // TODO: implement A320 API support
-                        if (global_context->use_320ultimate_api != 0)
+                        if (global_context->xnz_tt == XNZ_TT_FF32)
                         {
                             int th_axis_ass[2] = { 20, 21, };
-                            xnz_log("[info]: releasing joystick axes (use_320ultimate_api)\n");
+                            xnz_log("[info]: releasing joystick axes (XNZ_TT_FF32)\n");
                             XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
                         }
                         else
@@ -790,7 +816,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         }
                     }
                     global_context->skip_idle_overwrite = 0;
-                    global_context->f_thr_tolis = global_context->f_thr_array;
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
                     xnz_log("setting TCA flight loop callback interval (enabled: %s)\n",
                             global_context->tca_support_enabled == 0 ? "no" : "yes");
@@ -847,16 +872,16 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
         }
 
-        if (ctx->use_320ultimate_api == -1)
+        if (ctx->xnz_tt == XNZ_TT_FF32 && !ctx->ff32.api_has_initialized)
         {
-            XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->s);
-            if (ctx->s.DataVersion != NULL && ctx->s.DataAddUpdate != NULL)
+            XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->ff32.s);
+            if (ctx->ff32.s.DataVersion != NULL && ctx->ff32.s.DataAddUpdate != NULL)
             {
-                ctx->id_f32_eng_lever_lt = ctx->s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever1");
-                ctx->id_f32_eng_lever_rt = ctx->s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever2");
-                if (ctx->id_f32_eng_lever_lt > -1 && ctx->id_f32_eng_lever_rt > -1)
+                ctx->ff32.id_f32_eng_lever_lt = ctx->ff32.s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever1");
+                ctx->ff32.id_f32_eng_lever_rt = ctx->ff32.s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever2");
+                if (ctx->ff32.id_f32_eng_lever_lt > -1 && ctx->ff32.id_f32_eng_lever_rt > -1)
                 {
-                    ctx->use_320ultimate_api = 1;
+                    ctx->ff32.api_has_initialized = 1;
                 }
             }
         }
@@ -885,8 +910,8 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             }
             fp1++; continue;
         }
-        // Airbus A/T doesn't move levers, status not relevant for us
-        if (ctx->use_320ultimate_api <= 0 && ctx->f_thr_array == NULL)
+        // default aircraft: check A/T
+        if (ctx->xnz_tt == XNZ_TT_XPLM)
         {
             while (autothrottle_active == 0 && ia1 < ia2 && NULL != ctx->i_autoth[ia1])
             {
@@ -909,24 +934,38 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
 
         /* throttle readout (overlay) */
-        if (ctx->use_320ultimate_api > 0)
+        switch (ctx->xnz_tt)
         {
-            // Pedestal.EngineLever*: 0-20-65 (reverse-idle-max)
-            ctx->s.ValueGet(ctx->id_f32_eng_lever_lt, &array[0]);
-            ctx->s.ValueGet(ctx->id_f32_eng_lever_rt, &array[1]);
-            if ((f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 45.0f) < 0.0f)
+            case XNZ_TT_FF32:
             {
-                (f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 20.0f);
+                if (ctx->ff32.api_has_initialized)
+                {
+                    // Pedestal.EngineLever*: 0-20-65 (reverse-idle-max)
+                    ctx->ff32.s.ValueGet(ctx->ff32.id_f32_eng_lever_lt, &array[0]);
+                    ctx->ff32.s.ValueGet(ctx->ff32.id_f32_eng_lever_rt, &array[1]);
+                    if ((f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 45.0f) < 0.0f)
+                    {
+                        (f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 20.0f);
+                    }
+                    break;
+                }
+            } // fallthrough
+            case XNZ_TT_SKIP:
+                f_throttall = ctx->last_throttle_all;
+                break;
+
+            case XNZ_TT_TOLI:
+            {
+                XPLMGetDatavf(ctx->toli.f_thr_array, array, 0, 2);
+                f_throttall = ((array[0] + array[1]) / 2.0f);
+                break;
             }
-        }
-        else if (ctx->f_thr_array != NULL)
-        {
-            XPLMGetDatavf(ctx->f_thr_array, array, 0, 2);
-            f_throttall = ((array[0] + array[1]) / 2.0f);
-        }
-        else
-        {
-            f_throttall = XPLMGetDataf(ctx->f_throttall);
+
+            default:
+            {
+                f_throttall = XPLMGetDataf(ctx->f_throttall);
+                break;
+            }
         }
         if (fabsf(ctx->last_throttle_all - f_throttall) >= 0.0025f)
         {
@@ -1234,7 +1273,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
 
         /* check autothrust status */
-        if (ctx->f_thr_tolis == NULL && ctx->use_320ultimate_api < 1)
+        if (ctx->xnz_tt == XNZ_TT_XPLM)
         {   // Airbus A/T doesn't move levers, status not relevant for us
             size_t ia1 = 0, ia2 = sizeof(ctx->i_autoth) / sizeof(ctx->i_autoth[0]);
             size_t fa1 = 0, fa2 = sizeof(ctx->f_autoth) / sizeof(ctx->f_autoth[0]);
@@ -1273,14 +1312,14 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             sum = f_stick_val[0] + f_stick_val[1];
             f_stick_val[0] = f_stick_val[1] = sum / 2.0f;
         }
-        if (ctx->use_320ultimate_api > 0)
+        if (ctx->xnz_tt == XNZ_TT_FF32)
         {
             /*
              * use the A320's native API to check the thrust levers' positions and X-Plane thrust up/down commands to move said levers up or down???
              */
             return (1.0f / 20.0f); // TODO: implement
         }
-        if (ctx->f_thr_tolis)
+        if (ctx->xnz_tt == XNZ_TT_TOLI)
         {
             if (symmetrical_thrust)
             {
@@ -1298,7 +1337,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                     }
                     else
                     {
-                        XPLMGetDatavf(ctx->f_thr_tolis, f_thr_tolis, 0, 2);
+                        XPLMGetDatavf(ctx->toli.f_thr_array, f_thr_tolis, 0, 2);
                     }
                     if (f_thr_tolis[0] >= 0.0f && f_thr_tolis[1] >= 0.0f)
                     {
@@ -1313,17 +1352,17 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
                 {
                     ctx->skip_idle_overwrite = 0;
                 }
-                XPLMSetDatavf(ctx->f_thr_tolis, f_stick_val, 0, 2);
+                XPLMSetDatavf(ctx->toli.f_thr_array, f_stick_val, 0, 2);
                 return (1.0f / 20.0f);
             }
             f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
             f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1], ctx->zones_info);
-            XPLMSetDatavf(ctx->f_thr_tolis, f_stick_val, 0, 2);
+            XPLMSetDatavf(ctx->toli.f_thr_array, f_stick_val, 0, 2);
             return (1.0f / 20.0f);
         }
         if (symmetrical_thrust)
         {
-            if (ctx->ddenn_cl300_detents)
+            if (ctx->xnz_tt == XNZ_TT_DDCL)
             {
                 f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
             }
@@ -1377,7 +1416,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
             return (1.0f / 20.0f);
         }
-        if (ctx->ddenn_cl300_detents)
+        if (ctx->xnz_tt == XNZ_TT_DDCL)
         {
             f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
             f_stick_val[1] = throttle_mapping_ddcl30(1.0f - f_stick_val[1], ctx->zones_info);
@@ -1426,7 +1465,7 @@ static float throttle_hdlr(float inElapsedSinceLastCall,
         }
         f_stick_val[0] = fabsf(f_stick_val[0]);
         f_stick_val[1] = fabsf(f_stick_val[1]);
-        XPLMSetDatavf(ctx->f_thr_gener, f_stick_val, 0, 2);
+        XPLMSetDatavf(ctx->f_thr_array, f_stick_val, 0, 2);
         return (1.0f / 20.0f);
     }
     XPLMDebugString(XNZ_LOG_PREFIX"[error]: throttle_hdlr: inRefcon == NULL, disabling callback\n");
