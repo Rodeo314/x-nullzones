@@ -43,14 +43,16 @@
 #pragma clang diagnostic pop
 #endif
 
-#define T_ZERO                   (00.001f)
-#define AIRSPEED_MIN_KTS         (50.000f)
-#define AIRSPEED_MAX_KTS         (62.500f)
-#define GROUNDSP_MIN_KTS         (03.125f)
-#define GROUNDSP_MAX_KTS         (31.250f)
-#define GROUNDSP_KTS_MIN         (02.500f)
-#define GROUNDSP_KTS_MID         (26.250f)
-#define GROUNDSP_KTS_MAX         (50.000f)
+#define T_ZERO                  (.000001f)
+#define T_SMALL                 (00.0025f)
+#define AIRSPEED_MIN_KTS        (50.0000f)
+#define AIRSPEED_MAX_KTS        (62.5000f)
+#define GROUNDSP_MIN_KTS        (03.1250f)
+#define GROUNDSP_MAX_KTS        (31.2500f)
+#define GROUNDSP_KTS_MIN        (02.5000f)
+#define GROUNDSP_KTS_MID        (26.2500f)
+#define GROUNDSP_KTS_MAX        (50.0000f)
+#define MPS2KPH(MPS) (MPS * 3.6f / 1.000f)
 #define MPS2KTS(MPS) (MPS * 3.6f / 1.852f)
 #define ACF_ROLL_SET(_var, _gs, _base)                         \
 {                                                              \
@@ -76,14 +78,427 @@ enum
 
 typedef struct
 {
-    /*
-     * TODO: future: function pointer to default linear/non-linear mapping function based on user preference???
-     */
     float   min[ZONE_MAX + 1];
     float   max[ZONE_MAX + 1];
     float   len[ZONE_MAX + 1];
     float share[ZONE_MAX + 1];
 } thrust_zones;
+
+typedef struct
+{
+    int xp_11_50_or_later;
+
+    enum
+    {
+        XNZ_AB_ERRR =  -1,
+        XNZ_AB_NONE =   0,
+        XNZ_AB_XPLM =   1,
+        XNZ_AB_FF32 = 320,
+        XNZ_AB_TO32 = 321,
+        XNZ_AB_FF35 = 350,
+        XNZ_AB_IX33 = 733,
+        XNZ_AB_FF75 = 757,
+    } xnz_ab;
+
+    enum
+    {
+        XNZ_AP_ERRR =  -1,
+        XNZ_AP_NONE =   0,
+        XNZ_AP_XPLM =   1,
+        XNZ_AP_COMM =   2,
+        XNZ_AP_TOGG =   3,
+        XNZ_AP_FF32 = 320,
+    } xnz_ap;
+
+    union
+    {
+        struct
+        {
+            XPLMCommandRef cmd_ap_disc;
+            XPLMCommandRef cmd_ap_conn;
+        } xplm;
+
+        struct
+        {
+            XPLMCommandRef cmd_ap_disc;
+            XPLMCommandRef cmd_ap_conn;
+        } comm;
+
+        struct
+        {
+            XPLMCommandRef cmd_ap_togg;
+            XPLMDataRef    ref_ap_stts;
+        } togg;
+    } ap;
+
+    enum
+    {
+        XNZ_AT_ERRR =  -1,
+        XNZ_AT_NONE =   0,
+        XNZ_AT_XPLM =   1,
+        XNZ_AT_COMM =   2,
+        XNZ_AT_TOGG =   3,
+        XNZ_AT_TOGA =   4,
+        XNZ_AT_FF32 = 320,
+        XNZ_AT_TOLI = 321,
+    } xnz_at;
+
+    union
+    {
+        struct
+        {
+            XPLMCommandRef cmd_at_disc;
+            XPLMCommandRef cmd_at_toga;
+        } comm;
+
+        struct
+        {
+            XPLMCommandRef cmd_at_togg;
+            XPLMDataRef    ref_at_stts;
+        } togg;
+
+        struct
+        {
+            XPLMCommandRef cmd_ap_toga;
+        } toga;
+    } at;
+
+    enum
+    {
+        XNZ_BT_ERRR =  -1,
+        XNZ_BT_XPLM =   1,
+        XNZ_BT_COMM =   2,
+        XNZ_BT_PKBR =   3,
+        XNZ_BT_SIMC =   4,
+        XNZ_BT_FF32 = 320,
+        XNZ_BT_TO32 = 321,
+        XNZ_BT_FF35 = 350,
+        XNZ_BT_TBM9 = 900,
+    } xnz_bt;
+
+    union
+    {
+        struct
+        {
+            XPLMCommandRef cmd_current;
+            XPLMCommandRef cmd_rgb_hld;
+            XPLMCommandRef cmd_mxb_hld;
+            const char *commnd_rgb_hld;
+            const char *commnd_max_hld;
+        } comm;
+
+        struct
+        {
+        } simc;
+
+        struct
+        {
+        } ff32;
+
+        struct
+        {
+            int pbrak_onoff; // for manual braking: remember the pbrak state
+        } ff35;
+
+        struct
+        {
+            XPLMDataRef l_rgb_ratio; // AirbusFBW/BrakePedalInputLeft
+            XPLMDataRef r_rgb_ratio; // AirbusFBW/BrakePedalInputRight
+            XPLMDataRef br_override; // AirbusFBW/BrakePedalInputOverride
+        } to32;
+
+        struct
+        {
+            XPLMDataRef rbrak_array; // tbm900/controls/gear/brake_req[2]
+            XPLMDataRef br_override; // tbm900/controls/gear/brake_req_ovrd
+        } tbm9;
+    } bt;
+
+    enum
+    {
+        XNZ_ET_ERRR =  -1,
+        XNZ_ET_NONE =   0,
+        XNZ_ET_XPJT =   1,
+        XNZ_ET_XPTP =   2,
+        XNZ_ET_XPPI =   3,
+        XNZ_ET_DA62 =  62,
+        XNZ_ET_E35L = 135,
+        XNZ_ET_FF32 = 320,
+        XNZ_ET_TO32 = 321,
+        XNZ_ET_FF35 = 350,
+        XNZ_ET_E55P = 535,
+        XNZ_ET_PIPA = 540,
+        XNZ_ET_EA50 = 610,
+        XNZ_ET_EVIC = 617,
+        XNZ_ET_CL30 = 700,
+        XNZ_ET_IX73 = 733,
+        XNZ_ET_FF75 = 757,
+        XNZ_ET_TBM9 = 900,
+    } xnz_et;
+
+    union
+    {
+        struct
+        {
+            XPLMCommandRef cmd_e_1_onn;
+            XPLMCommandRef cmd_e_1_off;
+            XPLMCommandRef cmd_e_2_onn;
+            XPLMCommandRef cmd_e_2_off;
+            XPLMCommandRef cmd_m_12_cr;
+            XPLMCommandRef cmd_m_12_no;
+            XPLMCommandRef cmd_m_12_st;
+        } to32;
+
+        struct
+        {
+            XPLMCommandRef cmd_e_1_onn;
+            XPLMCommandRef cmd_e_1_off;
+            XPLMCommandRef cmd_e_2_onn;
+            XPLMCommandRef cmd_e_2_off;
+            XPLMCommandRef cmd_m_12_cr;
+            XPLMCommandRef cmd_m_12_no;
+            XPLMCommandRef cmd_m_12_st;
+        } ff35;
+
+        struct
+        {
+            XPLMCommandRef cmd_e_1_onn; // sim/engines/mixture_up
+            XPLMCommandRef cmd_e_1_off; // sim/engines/mixture_down
+            XPLMCommandRef cmd_x_12_lt; // tbm900/actuators/elec/starter_up
+            XPLMCommandRef cmd_x_12_rt; // tbm900/actuators/elec/starter_down
+            XPLMCommandRef cmd_m_12_cr; // tbm900/actuators/elec/ignition_off
+            XPLMCommandRef cmd_m_12_no; // tbm900/actuators/elec/ignition_auto
+            XPLMCommandRef cmd_m_12_st; // tbm900/actuators/elec/ignition_on
+            XPLMDataRef    drf_fuelsel; // tbm900/switches/fuel/auto_man
+        } tbm9;
+
+        struct
+        {
+            XPLMDataRef    drf_mod_en1; // aerobask/eclipse/start_eng_0
+            XPLMDataRef    drf_mod_en2; // aerobask/eclipse/start_eng_1
+        } ea50;
+
+        struct
+        {
+            XPLMCommandRef cmd_e_1_onn; // aerobask/eng/master1_up
+            XPLMCommandRef cmd_e_1_off; // aerobask/eng/master1_dn
+            XPLMCommandRef cmd_e_2_onn; // aerobask/eng/master2_up
+            XPLMCommandRef cmd_e_2_off; // aerobask/eng/master2_dn
+            XPLMCommandRef cmd_ecu1_up; // aerobask/eng/ecu_ab1_up
+            XPLMCommandRef cmd_ecu1_dn; // aerobask/eng/ecu_ab1_dn
+            XPLMCommandRef cmd_ecu2_up; // aerobask/eng/ecu_ab2_up
+            XPLMCommandRef cmd_ecu2_dn; // aerobask/eng/ecu_ab2_dn
+            XPLMDataRef    drf_mod_ec1; // aerobask/eng/sw_ecu_ab2
+            XPLMDataRef    drf_mod_ec2; // aerobask/eng/sw_ecu_ab2
+        } da62;
+
+        struct
+        {
+            XPLMCommandRef cmd_m_12_no; // sim/igniters/igniter_contin_off_1
+            XPLMCommandRef cmd_m_12_st; // sim/igniters/igniter_contin_on_1
+            XPLMCommandRef cmd_x_12_lt; // sim/starters/engage_starter_1
+            XPLMCommandRef cmd_x_12_rt; // sim/starters/shut_down_1
+            XPLMCommandRef cmd_e_1_off; // sim/fuel/fuel_pump_1_off
+            XPLMCommandRef cmd_e_1_onn; // sim/fuel/fuel_pump_1_on
+            XPLMCommandRef cmd_e_2_tog; // aerobask/fuel_auto_toggle
+            XPLMDataRef    drf_fuel_at; // aerobask/lt_fuel_auto
+        } evic;
+
+        struct
+        {
+            XPLMDataRef    drf_e_1_ign; // aerobask/engines/sw_ignition_1
+            XPLMDataRef    drf_e_2_ign; // aerobask/engines/sw_ignition_2
+            XPLMDataRef    drf_e_1_knb; // aerobask/engines/knob_start_stop_1
+            XPLMDataRef    drf_e_2_knb; // aerobask/engines/knob_start_stop_2
+            XPLMCommandRef cmd_ig_1_up; // aerobask/engines/ignition_1_up
+            XPLMCommandRef cmd_ig_1_dn; // aerobask/engines/ignition_1_dn
+            XPLMCommandRef cmd_ig_2_up; // aerobask/engines/ignition_2_up
+            XPLMCommandRef cmd_ig_2_dn; // aerobask/engines/ignition_2_dn
+            XPLMCommandRef cmd_e_1_lft; // aerobask/engines/knob_1_lt
+            XPLMCommandRef cmd_e_1_rgt; // aerobask/engines/knob_1_rt
+            XPLMCommandRef cmd_e_2_lft; // aerobask/engines/knob_2_lt
+            XPLMCommandRef cmd_e_2_rgt; // aerobask/engines/knob_2_rt
+        } e55p;
+
+        struct
+        {
+            XPLMDataRef    drf_e_1_knb; // XCrafts/ERJ/engine1_starter_knob
+            XPLMDataRef    drf_e_2_knb; // XCrafts/ERJ/engine2_starter_knob
+            XPLMCommandRef cmd_e_1_lft; // XCrafts/Starter_Eng_1_down_CCW
+            XPLMCommandRef cmd_e_1_rgt; // XCrafts/Starter_Eng_1_up_CW
+            XPLMCommandRef cmd_e_2_lft; // XCrafts/Starter_Eng_2_down_CCW
+            XPLMCommandRef cmd_e_2_rgt; // XCrafts/Starter_Eng_2_up_CW
+        } e35l;
+
+        struct
+        {
+            XPLMDataRef drf_e_1_cut; // ixeg/733/fuel/fuel_start_lever1_act
+            XPLMDataRef drf_e_2_cut; // ixeg/733/fuel/fuel_start_lever2_act
+            XPLMDataRef drf_e_1_knb; // ixeg/733/engine/eng1_start_act
+            XPLMDataRef drf_e_2_knb; // ixeg/733/engine/eng1_start_act
+        } ix73;
+
+        struct
+        {
+            XPLMDataRef drf_e_1_cut; // 1-sim/fuel/fuelCutOffLeft
+            XPLMDataRef drf_e_2_cut; // 1-sim/fuel/fuelCutOffRight
+            XPLMDataRef drf_e_1_knb; // 1-sim/engine/leftStartSelector
+            XPLMDataRef drf_e_2_knb; // 1-sim/engine/rightStartSelector
+        } ff75;
+    } et;
+
+    enum
+    {
+        XNZ_PB_ERRR =  -1,
+        XNZ_PB_XPLM =   1,
+        XNZ_PB_COMM =   2,
+        XNZ_PB_FF32 = 320,
+        XNZ_PB_TO32 = 321,
+        XNZ_PB_FF35 = 350,
+        XNZ_PB_TBM9 = 900,
+    } xnz_pb;
+
+    union
+    {
+        struct
+        {
+        } comm;
+
+        struct
+        {
+        } ff32;
+
+        struct
+        {
+            XPLMDataRef pbrak_offon; // 1-sim/parckBrake
+        } ff35;
+
+        struct
+        {
+            XPLMDataRef pbrak_onoff; // AirbusFBW/ParkBrake
+        } to32;
+
+        struct
+        {
+            XPLMDataRef pbrak_ratio; // tbm900/switches/gear/park_brake
+        } tbm9;
+    } pb;
+
+    struct
+    {
+        XPLMCommandRef at_at_on; // sim/autopilot/autothrottle_on
+        XPLMCommandRef at_at_no; // sim/autopilot/autothrottle_off
+        XPLMCommandRef ap_to_ga; // sim/autopilot/take_off_go_around
+        XPLMCommandRef p_start1; // sim/starters/engage_starter_1
+        XPLMCommandRef p_mboth1; // sim/magnetos/magnetos_both_1
+        XPLMCommandRef p_m_lft1; // sim/magnetos/magnetos_left_1
+        XPLMCommandRef p_m_rgt1; // sim/magnetos/magnetos_right_1
+        XPLMCommandRef p_mstop1; // sim/magnetos/magnetos_off_1
+        XPLMCommandRef p_start2; // sim/starters/engage_starter_2
+        XPLMCommandRef p_mboth2; // sim/magnetos/magnetos_both_2
+        XPLMCommandRef p_m_lft2; // sim/magnetos/magnetos_left_2
+        XPLMCommandRef p_m_rgt2; // sim/magnetos/magnetos_right_2
+        XPLMCommandRef p_mstop2; // sim/magnetos/magnetos_off_2
+        XPLMCommandRef p_start3; // sim/starters/engage_starter_3
+        XPLMCommandRef p_mboth3; // sim/magnetos/magnetos_both_3
+        XPLMCommandRef p_m_lft3; // sim/magnetos/magnetos_left_3
+        XPLMCommandRef p_m_rgt3; // sim/magnetos/magnetos_right_3
+        XPLMCommandRef p_mstop3; // sim/magnetos/magnetos_off_3
+        XPLMCommandRef p_start4; // sim/starters/engage_starter_4
+        XPLMCommandRef p_mboth4; // sim/magnetos/magnetos_both_4
+        XPLMCommandRef p_m_lft4; // sim/magnetos/magnetos_left_4
+        XPLMCommandRef p_m_rgt4; // sim/magnetos/magnetos_right_4
+        XPLMCommandRef p_mstop4; // sim/magnetos/magnetos_off_4
+        XPLMDataRef auto_pil_on; // sim/cockpit2/autopilot/servos_on
+        XPLMDataRef auto_thr_on; // sim/cockpit2/autopilot/autothrottle_on
+        XPLMDataRef eng_running; // sim/flightmodel/engine/ENGN_running
+        XPLMDataRef igniters_on; // sim/cockpit2/engine/actuators/igniter_on
+        XPLMDataRef auto_ignite; // sim/cockpit2/engine/actuators/auto_ignite_on
+        XPLMDataRef groundspeed; // sim/flightmodel/position/groundspeed
+        XPLMDataRef ongroundany; // sim/flightmodel/failures/onground_any
+        XPLMDataRef l_rgb_ratio; // sim/cockpit2/controls/left_brake_ratio
+        XPLMDataRef r_rgb_ratio; // sim/cockpit2/controls/right_brake_ratio
+        XPLMDataRef pbrak_ratio; // sim/cockpit2/controls/parking_brake_ratio
+        int         pbrak_onoff; // for manual braking: remember the pbrak state
+        int         pbrakonoff2; // for xnz/brakes/regular/park
+    } xp;
+
+    XPLMCommandRef cmd_rgb_pkb; // xnz/brakes/regular/park
+    XPLMCommandRef cmd_rgb_hld; // xnz/brakes/regular/hold
+    XPLMCommandRef cmd_pkb_tog; // xnz/brakes/park/toggle
+    XPLMCommandRef cmd_pkb_onh; // xnz/brakes/park/on/hold
+    XPLMCommandRef cmd_pkb_onn; // xnz/brakes/park/on/set
+    XPLMCommandRef cmd_pkb_off; // xnz/brakes/park/unset
+    XPLMCommandRef cmd_at_toga; // xnz/auto/thrust/to/ga
+    XPLMCommandRef cmd_a_12_lt; // xnz/tca/12/at/disc/lt
+    XPLMCommandRef cmd_a_12_rt; // xnz/tca/12/at/disc/rt
+    XPLMCommandRef cmd_a_34_lt; // xnz/tca/34/at/disc/lt
+    XPLMCommandRef cmd_a_34_rt; // xnz/tca/34/at/disc/rt
+    XPLMCommandRef cmd_x_12_lt; // xnz/tca/12/extra/lt
+    XPLMCommandRef cmd_x_12_rt; // xnz/tca/12/extra/rt
+    XPLMCommandRef cmd_x_34_lt; // xnz/tca/34/extra/lt
+    XPLMCommandRef cmd_x_34_rt; // xnz/tca/34/extra/rt
+    XPLMCommandRef cmd_m_12_ch; // xnz/tca/12/modes/crank/hold
+    XPLMCommandRef cmd_m_12_cr; // xnz/tca/12/modes/crank
+    XPLMCommandRef cmd_m_12_no; // xnz/tca/12/modes/norm
+    XPLMCommandRef cmd_m_12_st; // xnz/tca/12/modes/start
+    XPLMCommandRef cmd_m_12_sh; // xnz/tca/12/modes/start/hold
+    XPLMCommandRef cmd_m_34_ch; // xnz/tca/34/modes/crank/hold
+    XPLMCommandRef cmd_m_34_cr; // xnz/tca/34/modes/crank
+    XPLMCommandRef cmd_m_34_no; // xnz/tca/34/modes/norm
+    XPLMCommandRef cmd_m_34_st; // xnz/tca/34/modes/start
+    XPLMCommandRef cmd_m_34_sh; // xnz/tca/34/modes/start/hold
+    XPLMCommandRef cmd_e_1_onh; // xnz/tca/engines/1/on/hold
+    XPLMCommandRef cmd_e_1_onn; // xnz/tca/engines/1/on
+    XPLMCommandRef cmd_e_1_off; // xnz/tca/engines/1/off
+    XPLMCommandRef cmd_e_2_onh; // xnz/tca/engines/2/on/hold
+    XPLMCommandRef cmd_e_2_onn; // xnz/tca/engines/2/on
+    XPLMCommandRef cmd_e_2_off; // xnz/tca/engines/2/off
+    XPLMCommandRef cmd_e_3_onh; // xnz/tca/engines/3/on/hold
+    XPLMCommandRef cmd_e_3_onn; // xnz/tca/engines/3/on
+    XPLMCommandRef cmd_e_3_off; // xnz/tca/engines/3/off
+    XPLMCommandRef cmd_e_4_onh; // xnz/tca/engines/4/on/hold
+    XPLMCommandRef cmd_e_4_onn; // xnz/tca/engines/4/on
+    XPLMCommandRef cmd_e_4_off; // xnz/tca/engines/4/off
+} xnz_cmd_context;
+
+static int chandler_rgb_pkb(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_rgb_hld(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_pkb_tog(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_pkb_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_pkb_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_pkb_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_a_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_a_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_a_34_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_a_34_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_x_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_x_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_x_34_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_x_34_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_12_ch(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_12_cr(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_12_no(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_12_st(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_12_sh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_34_ch(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_34_cr(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_34_no(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_34_st(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_m_34_sh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_1_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_1_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_1_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_2_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_2_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_2_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_3_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_3_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_3_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_4_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_4_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_e_4_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 
 typedef struct
 {
@@ -107,11 +522,12 @@ typedef struct
     XPWidgetID  widgetid[2];
 #endif
 
+    xnz_cmd_context commands;
+
     enum
     {
-        XNZ_TT_SKIP =  -1,
-        XNZ_TT_XPLM =   0,
-        XNZ_TT_DDCL = 300,
+        XNZ_TT_ERRR =  -1,
+        XNZ_TT_XPLM =   1,
         XNZ_TT_FF32 = 320,
         XNZ_TT_TOLI = 321,
         XNZ_TT_TBM9 = 900,
@@ -131,8 +547,14 @@ typedef struct
         {
             XPLMDataRef f_thr_array;
         } toli;
-    };
 
+        struct
+        {
+            XPLMDataRef engn_rng;
+        } tbm9;
+    } tt;
+
+    int i_got_axis_input[3];
     int i_context_init_done;
     int i_version_simulator;
     int i_version_xplm_apis;
@@ -143,20 +565,15 @@ typedef struct
     XPLMDataRef i_ngine_num;
     XPLMDataRef i_ngine_typ;
     XPLMDataRef rev_info[3];
-    XPLMCommandRef rev_togg;
-    XPLMCommandRef rev_tog1;
-    XPLMCommandRef rev_tog2;
+    XPLMCommandRef betto[9];
+    XPLMCommandRef revto[9];
     int acft_has_rev_thrust;
     int acf_has_beta_thrust;
-    int i_propmode_value[2];
+    int arcrft_engine_count;
+    int i_propmode_value[8];
     int idx_throttle_axis_1;
-    int asymmetrical_thrust;
     XPLMDataRef f_throttall;
     XPLMDataRef f_thr_array;
-    XPLMDataRef f_servos[9];
-    XPLMDataRef i_servos[9];
-    XPLMDataRef i_autoth[9];
-    XPLMDataRef f_autoth[9];
 
     XPLMMenuID id_th_on_off;
     int id_menu_item_on_off;
@@ -166,33 +583,10 @@ typedef struct
 }
 xnz_context;
 
-static const char *i_servo_dataref_names[] =
-{
-    "sim/cockpit2/autopilot/servos_on", // int n boolean Are the servos on? Takes into account FD mode and control-wheel-steering, failures, etc.
-    NULL,
-};
-
-static const char *f_servo_dataref_names[] =
-{
-    NULL,
-};
-
-static const char *i_autot_dataref_names[] =
-{
-    "sim/cockpit2/autopilot/autothrottle_on", // int n boolean Auto-throttle really working? Takes into account failures, esys, etc.
-    NULL,
-};
-
-static const char *f_autot_dataref_names[] =
-{
-    NULL,
-};
-
-static int first_xplane_run = 1;
 static xnz_context *global_context = NULL;
 
 static int               xnz_log(const char *format, ...);
-static float      throttle_hdlr(float, float, int, void*);
+static float      axes_hdlr_fnc(float, float, int, void*);
 static void       menu_hdlr_fnc(void*,             void*);
 static inline float throttle_mapping(float, thrust_zones);
 
@@ -259,11 +653,14 @@ PLUGIN_API void XPluginStop(void)
     return;
 }
 
-static float TCA_IDLE_CTR = 0.295f;
-static float TCA_CLMB_CTR = 0.515f;
+#define HS_TBM9_IDLE (0.35f)
+
+// note: maximum L/R difference was measured slightly over 6%, but we allow for noisier hardware than mine
+static float TCA_SYNCBAND = .0750f;
+static float TCA_DEADBAND = .0375f;
 static float TCA_FLEX_CTR = 0.715f;
-static float TCA_DEADBAND = 0.035f;
-static float TCA_SYNCBAND = 0.070f;
+static float TCA_CLMB_CTR = 0.515f;
+static float TCA_IDLE_CTR = 0.295f;
 
 static void update_thrust_zones(thrust_zones *info)
 {
@@ -284,16 +681,16 @@ static void update_thrust_zones(thrust_zones *info)
         info->len[ZONE_FLX] = (info->max[ZONE_FLX] - info->min[ZONE_FLX]); // default: 0.130f
         info->len[ZONE_CLB] = (info->max[ZONE_CLB] - info->min[ZONE_CLB]); // default: 0.150f
         info->len[ZONE_REV] = (info->max[ZONE_REV] - info->min[ZONE_REV]); // default: 0.225f
+    }
+}
 
-        /*
-         * TODO: future: based on user preference?
-         */
-//      info->share[ZONE_CLB] = (sqrtf(1.0f / 3.0f));
-//      info->share[ZONE_FLX] = (sqrtf(2.0f / 3.0f) - info->share[ZONE_CLB]);
-//      info->share[ZONE_TGA] = (1.0f - info->share[ZONE_FLX] - info->share[ZONE_CLB]);
-        info->share[ZONE_CLB] = (1.0f / 2.0f);
-        info->share[ZONE_FLX] = (1.0f / 3.0f);
-        info->share[ZONE_TGA] = (1.0f / 6.0f);
+static void default_throt_share(thrust_zones *info)
+{
+    if (info)
+    {
+        info->share[ZONE_CLB] = 0.5f;
+        info->share[ZONE_FLX] = 0.8125f - info->share[ZONE_CLB];
+        info->share[ZONE_TGA] = 1.0f - info->share[ZONE_FLX] - info->share[ZONE_CLB];
     }
 }
 
@@ -381,12 +778,6 @@ PLUGIN_API int XPluginEnable(void)
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (f_throt_all)\n"); goto fail;
     }
 
-    /* initialize arrays */
-    memset(global_context->f_servos, (int)NULL, sizeof(global_context->f_servos));
-    memset(global_context->i_servos, (int)NULL, sizeof(global_context->i_servos));
-    memset(global_context->i_autoth, (int)NULL, sizeof(global_context->i_autoth));
-    memset(global_context->f_autoth, (int)NULL, sizeof(global_context->f_autoth));
-
     /* TCA thrust quadrant support */
     if (NULL == (global_context->i_stick_ass = XPLMFindDataRef("sim/joystick/joystick_axis_assignments")))
     {
@@ -424,19 +815,512 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_info[2])\n"); goto fail;
     }
-    if (NULL == (global_context->rev_togg = XPLMFindCommand("sim/engines/thrust_reverse_toggle")))
+    if (NULL == (global_context->betto[0] = XPLMFindCommand("sim/engines/beta_toggle_1")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_togg)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[0])\n"); goto fail;
     }
-    if (NULL == (global_context->rev_tog1 = XPLMFindCommand("sim/engines/thrust_reverse_toggle_1")))
+    if (NULL == (global_context->betto[1] = XPLMFindCommand("sim/engines/beta_toggle_2")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_tog1)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[1])\n"); goto fail;
     }
-    if (NULL == (global_context->rev_tog2 = XPLMFindCommand("sim/engines/thrust_reverse_toggle_2")))
+    if (NULL == (global_context->betto[2] = XPLMFindCommand("sim/engines/beta_toggle_3")))
     {
-        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (rev_tog2)\n"); goto fail;
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[2])\n"); goto fail;
     }
-    XPLMRegisterFlightLoopCallback((global_context->f_l_th = &throttle_hdlr), 0, global_context);
+    if (NULL == (global_context->betto[3] = XPLMFindCommand("sim/engines/beta_toggle_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[3])\n"); goto fail;
+    }
+    if (NULL == (global_context->betto[4] = XPLMFindCommand("sim/engines/beta_toggle_5")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[4])\n"); goto fail;
+    }
+    if (NULL == (global_context->betto[5] = XPLMFindCommand("sim/engines/beta_toggle_6")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[5])\n"); goto fail;
+    }
+    if (NULL == (global_context->betto[6] = XPLMFindCommand("sim/engines/beta_toggle_7")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[6])\n"); goto fail;
+    }
+    if (NULL == (global_context->betto[7] = XPLMFindCommand("sim/engines/beta_toggle_8")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[7])\n"); goto fail;
+    }
+    if (NULL == (global_context->betto[8] = XPLMFindCommand("sim/engines/beta_toggle")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (betto[9])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[0] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_1")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[0])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[1] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_2")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[1])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[2] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_3")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[2])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[3] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[3])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[4] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_5")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[4])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[5] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_6")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[5])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[6] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_7")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[6])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[7] = XPLMFindCommand("sim/engines/thrust_reverse_toggle_8")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[7])\n"); goto fail;
+    }
+    if (NULL == (global_context->revto[8] = XPLMFindCommand("sim/engines/thrust_reverse_toggle")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (revto[9])\n"); goto fail;
+    }
+    XPLMRegisterFlightLoopCallback((global_context->f_l_th = &axes_hdlr_fnc), 0, global_context);
+
+#ifndef PUBLIC_RELEASE_BUILD
+    /* TCA thrust quadrant support: buttons */
+    if (NULL == (global_context->commands.xp.at_at_on = XPLMFindCommand("sim/autopilot/autothrottle_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/autothrottle_on)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.at_at_no = XPLMFindCommand("sim/autopilot/autothrottle_off")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/autothrottle_off)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ap_to_ga = XPLMFindCommand("sim/autopilot/take_off_go_around")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/take_off_go_around)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_start1 = XPLMFindCommand("sim/starters/engage_starter_1")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/starters/engage_starter_1)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_start2 = XPLMFindCommand("sim/starters/engage_starter_2")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/starters/engage_starter_2)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_start3 = XPLMFindCommand("sim/starters/engage_starter_3")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/starters/engage_starter_3)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_start4 = XPLMFindCommand("sim/starters/engage_starter_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/starters/engage_starter_4)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mboth1 = XPLMFindCommand("sim/magnetos/magnetos_both_1")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_both_1)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mboth2 = XPLMFindCommand("sim/magnetos/magnetos_both_2")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_both_2)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mboth3 = XPLMFindCommand("sim/magnetos/magnetos_both_3")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_both_3)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mboth4 = XPLMFindCommand("sim/magnetos/magnetos_both_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_both_4)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_lft1 = XPLMFindCommand("sim/magnetos/magnetos_left_1")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_left_1)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_lft2 = XPLMFindCommand("sim/magnetos/magnetos_left_2")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_left_2)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_lft3 = XPLMFindCommand("sim/magnetos/magnetos_left_3")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_left_3)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_lft4 = XPLMFindCommand("sim/magnetos/magnetos_left_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_left_4)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_rgt1 = XPLMFindCommand("sim/magnetos/magnetos_right_1")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_right_1)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_rgt2 = XPLMFindCommand("sim/magnetos/magnetos_right_2")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_right_2)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_rgt3 = XPLMFindCommand("sim/magnetos/magnetos_right_3")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_right_3)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_m_rgt4 = XPLMFindCommand("sim/magnetos/magnetos_right_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_right_4)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mstop1 = XPLMFindCommand("sim/magnetos/magnetos_off_1")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_off_1)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mstop2 = XPLMFindCommand("sim/magnetos/magnetos_off_2")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_off_2)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mstop3 = XPLMFindCommand("sim/magnetos/magnetos_off_3")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_off_3)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.p_mstop4 = XPLMFindCommand("sim/magnetos/magnetos_off_4")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_off_4)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.auto_pil_on = XPLMFindDataRef("sim/cockpit2/autopilot/servos_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/autopilot/servos_on)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.auto_thr_on = XPLMFindDataRef("sim/cockpit2/autopilot/autothrottle_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/autopilot/autothrottle_on)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.eng_running = XPLMFindDataRef("sim/flightmodel/engine/ENGN_running")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/flightmodel/engine/ENGN_running)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.igniters_on = XPLMFindDataRef("sim/cockpit2/engine/actuators/igniter_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/engine/actuators/igniter_on)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.auto_ignite = XPLMFindDataRef("sim/cockpit2/engine/actuators/auto_ignite_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/engine/actuators/auto_ignite_on)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.groundspeed = XPLMFindDataRef("sim/flightmodel/position/groundspeed")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/flightmodel/position/groundspeed)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ongroundany = XPLMFindDataRef("sim/flightmodel/failures/onground_any")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/flightmodel/failures/onground_any)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.l_rgb_ratio = XPLMFindDataRef("sim/cockpit2/controls/left_brake_ratio")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/controls/left_brake_ratio)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.r_rgb_ratio = XPLMFindDataRef("sim/cockpit2/controls/right_brake_ratio")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/controls/right_brake_ratio)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.pbrak_ratio = XPLMFindDataRef("sim/cockpit2/controls/parking_brake_ratio")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/controls/parking_brake_ratio)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.cmd_rgb_pkb = XPLMCreateCommand("xnz/brakes/regular/park", "hold brakes regular + set parking brake")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/brakes/regular/park)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_rgb_pkb, &chandler_rgb_pkb, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_rgb_hld = XPLMCreateCommand("xnz/brakes/regular/hold", "hold brakes regular")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/brakes/regular/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_rgb_hld, &chandler_rgb_hld, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_pkb_tog = XPLMCreateCommand("xnz/brakes/park/toggle", "parking brake toggle")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/brakes/park/toggle)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_pkb_tog, &chandler_pkb_tog, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_pkb_onh = XPLMCreateCommand("xnz/brakes/park/on/hold", "parking brake hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/brakes/park/on/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_pkb_onh, &chandler_pkb_onh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_pkb_onn = XPLMCreateCommand("xnz/brakes/park/on/set", "parking brake set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/brakes/park/on/set)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_pkb_onn, &chandler_pkb_onn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_pkb_off = XPLMCreateCommand("xnz/brakes/park/unset", "parking brake release")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/brakes/park/unset)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_pkb_off, &chandler_pkb_off, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_at_toga = XPLMCreateCommand("xnz/auto/thrust/to/ga", "A/T takeoff/go-around")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/auto/thrust/to/ga)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_at_toga, &chandler_at_toga, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_a_12_lt = XPLMCreateCommand("xnz/tca/12/at/disc/lt", "TCA 1&2: lt A/T disconnect")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/at/disc/lt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_a_12_lt, &chandler_a_12_lt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_a_12_rt = XPLMCreateCommand("xnz/tca/12/at/disc/rt", "TCA 1&2: rt A/T disconnect")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/at/disc/rt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_a_12_rt, &chandler_a_12_rt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_x_12_lt = XPLMCreateCommand("xnz/tca/12/extra/lt", "TCA 1&2: lt extra button")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/extra/lt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_x_12_lt, &chandler_x_12_lt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_x_12_rt = XPLMCreateCommand("xnz/tca/12/extra/rt", "TCA 1&2: rt extra button")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/extra/rt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_x_12_rt, &chandler_x_12_rt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_a_34_lt = XPLMCreateCommand("xnz/tca/34/at/disc/lt", "TCA 3&4: lt A/T disconnect")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/at/disc/lt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_a_34_lt, &chandler_a_34_lt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_a_34_rt = XPLMCreateCommand("xnz/tca/34/at/disc/rt", "TCA 3&4: rt A/T disconnect")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/at/disc/rt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_a_34_rt, &chandler_a_34_rt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_x_34_lt = XPLMCreateCommand("xnz/tca/34/extra/lt", "TCA 3&4: lt extra button")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/extra/lt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_x_34_lt, &chandler_x_34_lt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_x_34_rt = XPLMCreateCommand("xnz/tca/34/extra/rt", "TCA 3&4: rt extra button")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/extra/rt)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_x_34_rt, &chandler_x_34_rt, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_12_ch = XPLMCreateCommand("xnz/tca/12/modes/crank/hold", "TCA 1&2: crank mode hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/modes/crank/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_12_ch, &chandler_m_12_ch, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_12_cr = XPLMCreateCommand("xnz/tca/12/modes/crank", "TCA 1&2: crank mode set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/modes/crank)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_12_cr, &chandler_m_12_cr, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_12_no = XPLMCreateCommand("xnz/tca/12/modes/norm", "TCA 1&2: norm mode set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/modes/norm)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_12_no, &chandler_m_12_no, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_12_st = XPLMCreateCommand("xnz/tca/12/modes/start", "TCA 1&2: start mode set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/modes/start)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_12_st, &chandler_m_12_st, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_12_sh = XPLMCreateCommand("xnz/tca/12/modes/start/hold", "TCA 1&2: start mode hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/12/modes/start/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_12_sh, &chandler_m_12_sh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_34_ch = XPLMCreateCommand("xnz/tca/34/modes/crank/hold", "TCA 3&4: crank mode hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/modes/crank/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_34_ch, &chandler_m_34_ch, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_34_cr = XPLMCreateCommand("xnz/tca/34/modes/crank", "TCA 3&4: crank mode set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/modes/crank)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_34_cr, &chandler_m_34_cr, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_34_no = XPLMCreateCommand("xnz/tca/34/modes/norm", "TCA 3&4: norm mode set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/modes/norm)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_34_no, &chandler_m_34_no, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_34_st = XPLMCreateCommand("xnz/tca/34/modes/start", "TCA 3&4: start mode set")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/modes/start)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_34_st, &chandler_m_34_st, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_m_34_sh = XPLMCreateCommand("xnz/tca/34/modes/start/hold", "TCA 3&4: start mode hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/34/modes/start/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_m_34_sh, &chandler_m_34_sh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_1_onh = XPLMCreateCommand("xnz/tca/engines/1/on/hold", "TCA: engine 1 ON hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/1/on/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_1_onh, &chandler_e_1_onh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_1_onn = XPLMCreateCommand("xnz/tca/engines/1/on", "TCA: engine 1 to ON")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/1/on)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_1_onn, &chandler_e_1_onn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_1_off = XPLMCreateCommand("xnz/tca/engines/1/off", "TCA: engine 1 to OFF")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/1/off)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_1_off, &chandler_e_1_off, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_2_onh = XPLMCreateCommand("xnz/tca/engines/2/on/hold", "TCA: engine 2 ON hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/2/on/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_2_onh, &chandler_e_2_onh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_2_onn = XPLMCreateCommand("xnz/tca/engines/2/on", "TCA: engine 2 to ON")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/2/on)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_2_onn, &chandler_e_2_onn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_2_off = XPLMCreateCommand("xnz/tca/engines/2/off", "TCA: engine 2 to OFF")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/2/off)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_2_off, &chandler_e_2_off, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_3_onh = XPLMCreateCommand("xnz/tca/engines/3/on/hold", "TCA: engine 3 ON hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/1/on/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_3_onh, &chandler_e_3_onh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_3_onn = XPLMCreateCommand("xnz/tca/engines/3/on", "TCA: engine 3 to ON")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/3/on)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_3_onn, &chandler_e_3_onn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_3_off = XPLMCreateCommand("xnz/tca/engines/3/off", "TCA: engine 3 to OFF")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/3/off)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_3_off, &chandler_e_3_off, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_4_onh = XPLMCreateCommand("xnz/tca/engines/4/on/hold", "TCA: engine 4 ON hold")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/4/on/hold)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_4_onh, &chandler_e_4_onh, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_4_onn = XPLMCreateCommand("xnz/tca/engines/4/on", "TCA: engine 4 to ON")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/4/on)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_4_onn, &chandler_e_4_onn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_e_4_off = XPLMCreateCommand("xnz/tca/engines/4/off", "TCA: engine 4 to OFF")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/tca/engines/4/off)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_e_4_off, &chandler_e_4_off, 0, &global_context->commands);
+    }
+    global_context->commands.xp_11_50_or_later = (outXPlaneVersion > 11499);
+#endif
 
     /* TCA quadrant support: toggle on/off via menu */
     if (NULL == (global_context->id_th_on_off = XPLMCreateMenu(XNZ_XPLM_TITLE, NULL, 0, &menu_hdlr_fnc, global_context)))
@@ -451,16 +1335,24 @@ PLUGIN_API int XPluginEnable(void)
 
     /* initialize detents, corresponding zone data */
     update_thrust_zones(&global_context->zones_info);
+    default_throt_share(&global_context->zones_info);
 
     /* all good */
     XPLMDebugString(XNZ_LOG_PREFIX"[info]: XPluginEnable OK\n");
     global_context->i_version_simulator = outXPlaneVersion;
     global_context->i_version_xplm_apis = outXPLMVersion;
+    global_context->commands.xnz_ab = XNZ_AB_ERRR;
+    global_context->commands.xnz_ap = XNZ_AP_ERRR;
+    global_context->commands.xnz_at = XNZ_AT_ERRR;
+    global_context->commands.xnz_bt = XNZ_BT_ERRR;
+    global_context->commands.xnz_et = XNZ_ET_ERRR;
+    global_context->commands.xnz_pb = XNZ_PB_ERRR;
     global_context->idx_throttle_axis_1 = -1;
     global_context->tca_support_enabled = 1;
+    global_context->i_got_axis_input[0] = 0;
     global_context->skip_idle_overwrite = 0;
     global_context->i_context_init_done = 0;
-    global_context->xnz_tt = XNZ_TT_SKIP;
+    global_context->xnz_tt = XNZ_TT_ERRR;
     return 1;
 
 fail:
@@ -495,18 +1387,21 @@ static void xnz_context_reset(xnz_context *ctx)
         }
 #endif
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
-        memset(ctx->f_servos, (int)NULL, sizeof(ctx->f_servos));
-        memset(ctx->i_servos, (int)NULL, sizeof(ctx->i_servos));
-        memset(ctx->i_autoth, (int)NULL, sizeof(ctx->i_autoth));
-        memset(ctx->f_autoth, (int)NULL, sizeof(ctx->f_autoth));
         if (ctx->idx_throttle_axis_1 >= 0)
         {
             int th_axis_ass[2] = { 20, 21, };
             XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
         }
+        default_throt_share(&ctx->zones_info);
+        ctx->commands.xnz_at = XNZ_AT_ERRR;
+        ctx->commands.xnz_ab = XNZ_AB_ERRR;
+        ctx->commands.xnz_ap = XNZ_AP_ERRR;
+        ctx->commands.xnz_bt = XNZ_BT_ERRR;
+        ctx->commands.xnz_et = XNZ_ET_ERRR;
+        ctx->commands.xnz_pb = XNZ_PB_ERRR;
         ctx->i_context_init_done = 0;
         ctx->skip_idle_overwrite = 0;
-        ctx->xnz_tt = XNZ_TT_SKIP;
+        ctx->xnz_tt = XNZ_TT_ERRR;
     }
 }
 
@@ -529,6 +1424,43 @@ PLUGIN_API void XPluginDisable(void)
     {
         XPDestroyWidget(global_context->widgetid[0], 1);
     }
+    if (global_context->commands.cmd_rgb_pkb) XPLMUnregisterCommandHandler(global_context->commands.cmd_rgb_pkb, &chandler_rgb_pkb, 0, &global_context->commands);
+    if (global_context->commands.cmd_rgb_hld) XPLMUnregisterCommandHandler(global_context->commands.cmd_rgb_hld, &chandler_rgb_hld, 0, &global_context->commands);
+    if (global_context->commands.cmd_pkb_tog) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_tog, &chandler_pkb_tog, 0, &global_context->commands);
+    if (global_context->commands.cmd_pkb_onh) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_onh, &chandler_pkb_onh, 0, &global_context->commands);
+    if (global_context->commands.cmd_pkb_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_onn, &chandler_pkb_onn, 0, &global_context->commands);
+    if (global_context->commands.cmd_pkb_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_off, &chandler_pkb_off, 0, &global_context->commands);
+    if (global_context->commands.cmd_at_toga) XPLMUnregisterCommandHandler(global_context->commands.cmd_at_toga, &chandler_at_toga, 0, &global_context->commands);
+    if (global_context->commands.cmd_a_12_lt) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_12_lt, &chandler_a_12_lt, 0, &global_context->commands);
+    if (global_context->commands.cmd_a_12_rt) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_12_rt, &chandler_a_12_rt, 0, &global_context->commands);
+    if (global_context->commands.cmd_x_12_lt) XPLMUnregisterCommandHandler(global_context->commands.cmd_x_12_lt, &chandler_x_12_lt, 0, &global_context->commands);
+    if (global_context->commands.cmd_x_12_rt) XPLMUnregisterCommandHandler(global_context->commands.cmd_x_12_rt, &chandler_x_12_rt, 0, &global_context->commands);
+    if (global_context->commands.cmd_a_34_lt) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_34_lt, &chandler_a_34_lt, 0, &global_context->commands);
+    if (global_context->commands.cmd_a_34_rt) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_34_rt, &chandler_a_34_rt, 0, &global_context->commands);
+    if (global_context->commands.cmd_x_34_lt) XPLMUnregisterCommandHandler(global_context->commands.cmd_x_34_lt, &chandler_x_34_lt, 0, &global_context->commands);
+    if (global_context->commands.cmd_x_34_rt) XPLMUnregisterCommandHandler(global_context->commands.cmd_x_34_rt, &chandler_x_34_rt, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_12_ch) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_12_ch, &chandler_m_12_ch, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_12_cr) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_12_cr, &chandler_m_12_cr, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_12_no) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_12_no, &chandler_m_12_no, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_12_st) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_12_st, &chandler_m_12_st, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_12_sh) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_12_sh, &chandler_m_12_sh, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_34_ch) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_34_ch, &chandler_m_34_ch, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_34_cr) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_34_cr, &chandler_m_34_cr, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_34_no) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_34_no, &chandler_m_34_no, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_34_st) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_34_st, &chandler_m_34_st, 0, &global_context->commands);
+    if (global_context->commands.cmd_m_34_sh) XPLMUnregisterCommandHandler(global_context->commands.cmd_m_34_sh, &chandler_m_34_sh, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_1_onh) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_1_onh, &chandler_e_1_onh, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_1_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_1_onn, &chandler_e_1_onn, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_1_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_1_off, &chandler_e_1_off, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_2_onh) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_2_onh, &chandler_e_2_onh, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_2_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_2_onn, &chandler_e_2_onn, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_2_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_2_off, &chandler_e_2_off, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_3_onh) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_3_onh, &chandler_e_3_onh, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_3_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_3_onn, &chandler_e_3_onn, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_3_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_3_off, &chandler_e_3_off, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_4_onh) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_4_onh, &chandler_e_4_onh, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_4_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_4_onn, &chandler_e_4_onn, 0, &global_context->commands);
+    if (global_context->commands.cmd_e_4_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_e_4_off, &chandler_e_4_off, 0, &global_context->commands);
 #endif
 
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
@@ -566,6 +1498,30 @@ static inline void dref_read_str(XPLMDataRef ref, char *buf, size_t siz)
     }
     return;
 }
+
+/*
+ * TODO: future: XNZ_AP_COMM
+ *
+ * ToLiSS A319, A321
+ * ctx->otto.conn.cc.name = "toliss_airbus/ap1_push";
+ * ctx->otto.disc.cc.name = "toliss_airbus/ap_disc_left_stick";
+ *
+ * FlightFactor A350 (X-Plane 10)
+ * ctx->otto.conn.cc.name = "airbus_qpac/ap1_push";
+ * ctx->otto.disc.cc.name = "sim/autopilot/fdir_servos_down_one";
+ *
+ * FlightFactor A350 (X-Plane 11)
+ * ctx->otto.conn.cc.name = "airbus_qpac/ap1_push";
+ * ctx->otto.disc.cc.name = "airbus_qpac/ap_disc_left_stick";
+ *
+ * IXEG 737-300 Classic
+ * ctx->otto.conn.cc.name = "ixeg/733/autopilot/AP_A_cmd_toggle";
+ * ctx->otto.disc.cc.name = "ixeg/733/autopilot/AP_disengage";
+ *
+ * FlightFactor 757, 767
+ * ctx->otto.conn.cc.name = NULL; // try to find a dataref maybe???
+ * ctx->otto.disc.cc.name = "1-sim/comm/AP/ap_disc";
+ */
 
 PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, void *inParam)
 {
@@ -605,7 +1561,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             if (inParam == XPLM_USER_AIRCRAFT && !global_context->i_context_init_done) // wait until aircraft plugins loaded (for custom datarefs)
             {
                 XPLMPluginID test = XPLM_NO_PLUGIN_ID;
-
 #ifndef PUBLIC_RELEASE_BUILD
                 global_context->minimum_null_zone = 0.04f; // hardcoded for now
                 global_context->nominal_roll_coef = XPLMGetDataf(global_context->acf_roll_co);
@@ -626,85 +1581,567 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             global_context->nominal_roll_coef, rc0, rc1, rc2);
                 }
 #endif
+                // check for engine count, type and related info
+                if ((global_context->arcrft_engine_count = XPLMGetDatai(global_context->i_ngine_num)) > 8)
+                {
+                    global_context->arcrft_engine_count = 8;
+                }
+                else if (global_context->arcrft_engine_count < 1)
+                {
+                    global_context->arcrft_engine_count = 1;
+                }
+                int acf_en_type[8]; XPLMGetDatavi(global_context->i_ngine_typ, acf_en_type, 0, global_context->arcrft_engine_count);
+                if (global_context->arcrft_engine_count >= 2)
+                {
+                    for (int i = global_context->arcrft_engine_count; i > 0; i--)
+                    {
+                        if (acf_en_type[i] != acf_en_type[0]) // some Carenado have extra engine for special effects
+                        {
+                            global_context->arcrft_engine_count--;
+                            continue;
+                        }
+                        continue;
+                    }
+                }
+                switch (acf_en_type[0])
+                {
+                    case 2: // turboprop
+                    case 8: // turboprop
+                        global_context->acf_has_beta_thrust = XPLMGetDatai(global_context->rev_info[0]) != 0;
+                        global_context->acft_has_rev_thrust =
+                        (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
+                         XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
+                        break;
 
-                // check for all supported autopilot/servo/autothrottle datarefs
-                for (size_t i = 0, j = 0, k = (sizeof(global_context->i_servos) / sizeof(global_context->i_servos[0])); i_servo_dataref_names[i] != NULL && j < k; i++)
-                {
-                    if (NULL != (global_context->i_servos[j] = XPLMFindDataRef(i_servo_dataref_names[i])))
-                    {
-                        j++;
-                    }
-                }
-                for (size_t i = 0, j = 0, k = (sizeof(global_context->f_servos) / sizeof(global_context->f_servos[0])); f_servo_dataref_names[i] != NULL && j < k; i++)
-                {
-                    if (NULL != (global_context->f_servos[j] = XPLMFindDataRef(f_servo_dataref_names[i])))
-                    {
-                        j++;
-                    }
-                }
-                for (size_t i = 0, j = 0, k = (sizeof(global_context->i_autoth) / sizeof(global_context->i_autoth[0])); i_autot_dataref_names[i] != NULL && j < k; i++)
-                {
-                    if (NULL != (global_context->i_autoth[j] = XPLMFindDataRef(i_autot_dataref_names[i])))
-                    {
-                        j++;
-                    }
-                }
-                for (size_t i = 0, j = 0, k = (sizeof(global_context->f_autoth) / sizeof(global_context->f_autoth[0])); f_autot_dataref_names[i] != NULL && j < k; i++)
-                {
-                    if (NULL != (global_context->f_autoth[j] = XPLMFindDataRef(f_autot_dataref_names[i])))
-                    {
-                        j++;
-                    }
+                    case 4: // turbojet
+                    case 5: // turbofan
+                        global_context->acf_has_beta_thrust = 0;
+                        global_context->acft_has_rev_thrust =
+                        (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
+                         XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
+                        break;
+
+                    default:
+                        global_context->acf_has_beta_thrust = 0;
+                        global_context->acft_has_rev_thrust = 0;
+                        break;
                 }
 
                 /* check for custom thrust datarefs/API */
-                if (global_context->xnz_tt == XNZ_TT_SKIP)
+                int auth_desc_icao = 0;
+                XPLMDataRef ref = NULL;
+                char auth[501], desc[261], icao[41];
+                if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_author")))
+                {
+                    dref_read_str(ref, auth, sizeof(auth));
+                    if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_descrip")))
+                    {
+                        dref_read_str(ref, desc, sizeof(desc));
+                        if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_ICAO")))
+                        {
+                            dref_read_str(ref, icao, sizeof(icao));
+                            auth_desc_icao = 1;
+                        }
+                    }
+                }
+                if (global_context->commands.xnz_ab == XNZ_AB_ERRR)
+                {
+                    global_context->commands.xnz_ab = XNZ_AB_NONE; // no reliable way to detect, enable on case-by-case basis below
+                }
+                if (global_context->commands.xnz_ap == XNZ_AP_ERRR)
+                {
+                    global_context->commands.xnz_ap = XNZ_AP_XPLM; // assume default X-Plane until proven otherwise
+                }
+                if (global_context->commands.xnz_at == XNZ_AT_ERRR)
+                {
+                    global_context->commands.xnz_at = XNZ_AT_NONE; // no reliable way to detect, enable on case-by-case basis below
+                }
+                if (global_context->commands.xnz_bt == XNZ_BT_ERRR)
+                {
+                    if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("com.simcoders.rep"))) && (XPLMIsPluginEnabled(test))))
+                    {
+                        global_context->commands.xnz_bt = XNZ_BT_SIMC; // use parkbrake and slightly increased strength
+                        global_context->commands.xp.pbrak_onoff = -1; // initialize our parking brake tracking variable
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_bt = XNZ_BT_XPLM; // assume default X-Plane until proven otherwise
+                        global_context->commands.xp.pbrak_onoff = -1; // initialize our parking brake tracking variable
+                    }
+                }
+                if (global_context->commands.xnz_et == XNZ_ET_ERRR)
+                {
+                    if (global_context->arcrft_engine_count >= 1 && global_context->arcrft_engine_count <= 4)
+                    {
+                        switch (acf_en_type[0])
+                        {
+                            case 0:
+                            case 1: // carbureted/injected recip. engines
+                                global_context->commands.xnz_et = XNZ_ET_XPPI;
+                                break;
+
+                            case 2:
+                            case 8: // free/fixed turbine engines
+                                global_context->commands.xnz_et = XNZ_ET_XPTP;
+                                break;
+
+                            case 4:
+                            case 5: // low/high bypass jet engines
+                                global_context->commands.xnz_et = XNZ_ET_XPJT;
+                                break;
+
+                            default:
+                                global_context->commands.xnz_et = XNZ_ET_NONE;
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_et = XNZ_ET_NONE;
+                    }
+                }
+                if (global_context->commands.xnz_pb == XNZ_PB_ERRR)
+                {
+                    global_context->commands.xnz_pb = XNZ_PB_XPLM; // assume default X-Plane until proven otherwise
+                }
+                if (global_context->xnz_tt == XNZ_TT_ERRR)
                 {
                     global_context->xnz_tt = XNZ_TT_XPLM; // assume default X-Plane until proven otherwise
                 }
                 if ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(XPLM_FF_SIGNATURE))) && (XPLMIsPluginEnabled(test)))
                 {
-                    global_context->xnz_tt = XNZ_TT_FF32;
-                    global_context->ff32.api_has_initialized = 0;
+                    global_context->  commands.xnz_ab = XNZ_AB_FF32;
+                    global_context->  commands.xnz_ap = XNZ_AP_FF32;
+                    global_context->  commands.xnz_at = XNZ_AT_FF32;
+                    global_context->  commands.xnz_bt = XNZ_BT_FF32;
+                    global_context->  commands.xnz_et = XNZ_ET_FF32;
+                    global_context->  commands.xnz_pb = XNZ_PB_FF32;
+                    global_context->           xnz_tt = XNZ_TT_FF32;
+                    global_context->tt.ff32.api_has_initialized = 0;
                 }
                 else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))) ||
                          ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
-                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))) ||
-                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(   "ToLiSs.Airbus.systems"))) && (XPLMIsPluginEnabled(test))) || // A350v1.4.8
-                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.6++
+                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))))
                 {
-                    if (NULL != (global_context->toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input")))
+                    if (NULL == (global_context->         tt.toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input"                         )) ||
+                        NULL == (global_context->commands.pb.to32.pbrak_onoff = XPLMFindDataRef("AirbusFBW/ParkBrake"                              )) ||
+// that was the bug :-( NULL == (global_context->commands.bt.to32.l_rgb_ratio = XPLMFindDataRef("AirbusFBW/BrakePedalInputleft"                    )) || // studid typo :-(
+                        NULL == (global_context->commands.bt.to32.l_rgb_ratio = XPLMFindDataRef("AirbusFBW/BrakePedalInputLeft"                    )) ||
+                        NULL == (global_context->commands.bt.to32.r_rgb_ratio = XPLMFindDataRef("AirbusFBW/BrakePedalInputRight"                   )) ||
+                        NULL == (global_context->commands.bt.to32.br_override = XPLMFindDataRef("AirbusFBW/BrakePedalInputOverride"                )) ||
+                        NULL == (global_context->commands.et.to32.cmd_e_1_onn = XPLMFindCommand("toliss_airbus/engcommands/Master1On"              )) ||
+                        NULL == (global_context->commands.et.to32.cmd_e_1_off = XPLMFindCommand("toliss_airbus/engcommands/Master1Off"             )) ||
+                        NULL == (global_context->commands.et.to32.cmd_e_2_onn = XPLMFindCommand("toliss_airbus/engcommands/Master2On"              )) ||
+                        NULL == (global_context->commands.et.to32.cmd_e_2_off = XPLMFindCommand("toliss_airbus/engcommands/Master2Off"             )) ||
+                        NULL == (global_context->commands.et.to32.cmd_m_12_cr = XPLMFindCommand("toliss_airbus/engcommands/EngineModeSwitchToCrank")) ||
+                        NULL == (global_context->commands.et.to32.cmd_m_12_no = XPLMFindCommand("toliss_airbus/engcommands/EngineModeSwitchToNorm" )) ||
+                        NULL == (global_context->commands.et.to32.cmd_m_12_st = XPLMFindCommand("toliss_airbus/engcommands/EngineModeSwitchToStart")))
                     {
-                        global_context->xnz_tt = XNZ_TT_TOLI;
+                        xnz_log("[error]: could not self-configure for TO32\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
                     }
                     else
                     {
-                        global_context->xnz_tt = XNZ_TT_SKIP;
+                        XPLMSetDatai(global_context->commands.bt.to32.br_override, 1);
+                        global_context->commands.xnz_ab = XNZ_AB_TO32;
+//                        global_context->commands.xnz_ab = XNZ_AP_COMM;
+                        global_context->commands.xnz_at = XNZ_AT_TOLI;
+                        global_context->commands.xnz_bt = XNZ_BT_TO32;
+                        global_context->commands.xnz_et = XNZ_ET_TO32;
+                        global_context->commands.xnz_pb = XNZ_PB_TO32;
+                        global_context->         xnz_tt = XNZ_TT_TOLI;
                     }
                 }
-                else if (XPLM_NO_PLUGIN_ID != XPLMFindPluginBySignature("1-sim.sasl"))
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ToLiSs.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.4--
                 {
-                    XPLMDataRef ref = NULL; char auth[501], desc[261], icao[41];
-                    if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_author")))
+                    if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(  "FFSTSmousehandler")))) || // A350v1.3--
+                        ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.ffsts.mousehandler"))))) // A350v1.4.x
                     {
-                        dref_read_str(ref, auth, sizeof(auth));
-                        if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_descrip")))
+                        if (NULL == (global_context->tt.toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input" )) ||
+                            NULL == (global_context->commands.pb.ff35.pbrak_offon = XPLMFindDataRef("1-sim/parckBrake")))
                         {
-                            dref_read_str(ref, desc, sizeof(desc));
-                            if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_ICAO")))
+                            xnz_log("[error]: could not self-configure for FF35 (XP10)\n");
+                            global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                            global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                            global_context->commands.xnz_at = XNZ_AT_ERRR;
+                            global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                            global_context->commands.xnz_et = XNZ_ET_ERRR;
+                            global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                            global_context->         xnz_tt = XNZ_TT_ERRR;
+                        }
+                        else
+                        {
+                            global_context->commands.xnz_ab = XNZ_AB_FF35;
+//                            global_context->commands.xnz_ap = XNZ_AP_COMM;
+                            global_context->commands.xnz_at = XNZ_AT_TOLI;
+                            global_context->commands.xnz_bt = XNZ_BT_FF35;
+                            global_context->commands.xnz_et = XNZ_ET_ERRR;
+                            global_context->commands.xnz_pb = XNZ_PB_FF35;
+                            global_context->         xnz_tt = XNZ_TT_TOLI;
+                        }
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.6++
+                {
+                    if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.stsff.mousehandler"))))) // A350v1.6++
+                    {
+                        if (NULL == (global_context->         tt.toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input"      )) ||
+                            NULL == (global_context->commands.pb.ff35.pbrak_offon = XPLMFindDataRef("1-sim/parckBrake"              )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_e_1_onn = XPLMFindCommand("1-sim/comm/cutOnLeft"          )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_e_1_off = XPLMFindCommand("1-sim/comm/cutOffLeft"         )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_e_2_onn = XPLMFindCommand("1-sim/comm/cutOnRight"         )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_e_2_off = XPLMFindCommand("1-sim/comm/cutOffRight"        )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_m_12_cr = XPLMFindCommand("1-sim/comm/startSwitchCrank"   )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_m_12_no = XPLMFindCommand("1-sim/comm/startSwitchNorm"    )) ||
+                            NULL == (global_context->commands.et.ff35.cmd_m_12_st = XPLMFindCommand("1-sim/comm/startSwitchStart")))
+                        {
+                            xnz_log("[error]: could not self-configure for FF35 (XP11)\n");
+                            global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                            global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                            global_context->commands.xnz_at = XNZ_AT_ERRR;
+                            global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                            global_context->commands.xnz_et = XNZ_ET_ERRR;
+                            global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                            global_context->         xnz_tt = XNZ_TT_ERRR;
+                        }
+                        else
+                        {
+                            global_context->commands.xnz_ab = XNZ_AB_FF35;
+//                            global_context->commands.xnz_ap = XNZ_AP_COMM;
+                            global_context->commands.xnz_at = XNZ_AT_TOLI;
+                            global_context->commands.xnz_bt = XNZ_BT_FF35;
+                            global_context->commands.xnz_et = XNZ_ET_FF35;
+                            global_context->commands.xnz_pb = XNZ_PB_FF35;
+                            global_context->         xnz_tt = XNZ_TT_TOLI;
+                        }
+                    }
+                }
+                else if (XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.stsff.757767avionics")) ||
+                         XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.flightfactor-steptosky.757767avionics")) ||
+                         XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("de-ru.philippmuenzel-den_rain.757avionics")))
+                {
+                    if (NULL == (global_context->commands.at.comm.cmd_at_disc = XPLMFindCommand("1-sim/comm/AP/at_disc")) ||
+                        NULL == (global_context->commands.at.comm.cmd_at_toga = XPLMFindCommand("1-sim/comm/AP/at_toga")) ||
+                        NULL == (global_context->commands.et.ff75.drf_e_1_cut = XPLMFindDataRef("1-sim/fuel/fuelCutOffLeft")) ||
+                        NULL == (global_context->commands.et.ff75.drf_e_2_cut = XPLMFindDataRef("1-sim/fuel/fuelCutOffRight")) ||
+                        NULL == (global_context->commands.et.ff75.drf_e_1_knb = XPLMFindDataRef("1-sim/engine/leftStartSelector")) ||
+                        NULL == (global_context->commands.et.ff75.drf_e_2_knb = XPLMFindDataRef("1-sim/engine/rightStartSelector")))
+                    {
+                        xnz_log("[error]: could not self-configure for FlightFactor 757/767\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_ab = XNZ_AB_FF75;
+//                        global_context->commands.xnz_ap = XNZ_AP_COMM;
+                        global_context->commands.xnz_at = XNZ_AT_COMM;
+                        global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                        global_context->commands.xnz_et = XNZ_ET_FF75;
+                        global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                        global_context->         xnz_tt = XNZ_TT_XPLM;
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ERJ_Functions"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (!strncasecmp(icao, "E35L", strlen("E35L")))
+                    {
+                        if (NULL == (global_context->commands.et.e35l.drf_e_1_knb = XPLMFindDataRef("XCrafts/ERJ/engine1_starter_knob")) ||
+                            NULL == (global_context->commands.et.e35l.drf_e_2_knb = XPLMFindDataRef("XCrafts/ERJ/engine2_starter_knob")) ||
+                            NULL == (global_context->commands.et.e35l.cmd_e_1_lft = XPLMFindCommand("XCrafts/Starter_Eng_1_down_CCW"  )) ||
+                            NULL == (global_context->commands.et.e35l.cmd_e_2_lft = XPLMFindCommand("XCrafts/Starter_Eng_2_down_CCW"  )) ||
+                            NULL == (global_context->commands.et.e35l.cmd_e_1_rgt = XPLMFindCommand("XCrafts/Starter_Eng_1_up_CW"     )) ||
+                            NULL == (global_context->commands.et.e35l.cmd_e_2_rgt = XPLMFindCommand("XCrafts/Starter_Eng_2_up_CW"     )) ||
+                            NULL == (global_context->commands.at.toga.cmd_ap_toga = XPLMFindCommand("XCrafts/ERJ/TOGA"               )))
+                        {
+                            xnz_log("[error]: could not self-configure for E35L\n");
+                            global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                            global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                            global_context->commands.xnz_at = XNZ_AT_ERRR;
+                            global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                            global_context->commands.xnz_et = XNZ_ET_ERRR;
+                            global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                            global_context->         xnz_tt = XNZ_TT_ERRR;
+                        }
+                        else
+                        {
+                            global_context->commands.xnz_ab = XNZ_AB_NONE;
+                            global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                            global_context->commands.xnz_at = XNZ_AT_TOGA;
+                            global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                            global_context->commands.xnz_et = XNZ_ET_E35L;
+                            global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                            global_context->         xnz_tt = XNZ_TT_XPLM;
+                        }
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("hotstart.tbm900"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (NULL == (global_context->            tt.tbm9.engn_rng = XPLMFindDataRef("tbm900/systems/engine/range"        )) ||
+                        NULL == (global_context->commands.bt.tbm9.rbrak_array = XPLMFindDataRef("tbm900/controls/gear/brake_req"     )) ||
+                        NULL == (global_context->commands.pb.tbm9.pbrak_ratio = XPLMFindDataRef("tbm900/switches/gear/park_brake"    )) ||
+                        NULL == (global_context->commands.bt.tbm9.br_override = XPLMFindDataRef("tbm900/controls/gear/brake_req_ovrd")) ||
+                        NULL == (global_context->commands.et.tbm9.drf_fuelsel = XPLMFindDataRef("tbm900/switches/fuel/auto_man"      )) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_e_1_onn = XPLMFindCommand("sim/engines/mixture_up"             )) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_e_1_off = XPLMFindCommand("sim/engines/mixture_down"           )) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_x_12_lt = XPLMFindCommand("tbm900/actuators/elec/starter_up"   )) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_x_12_rt = XPLMFindCommand("tbm900/actuators/elec/starter_down" )) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_m_12_cr = XPLMFindCommand("tbm900/actuators/elec/ignition_off" )) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_m_12_no = XPLMFindCommand("tbm900/actuators/elec/ignition_auto")) ||
+                        NULL == (global_context->commands.et.tbm9.cmd_m_12_st = XPLMFindCommand("tbm900/actuators/elec/ignition_on")))
+                    {
+                        xnz_log("[error]: could not self-configure for TBM9\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
+                    }
+                    else
+                    {
+                        XPLMSetDatai(global_context->commands.bt.tbm9.br_override, 1);
+                        global_context->commands.xnz_ab = XNZ_AB_NONE;
+//                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_at = XNZ_AT_NONE;
+                        global_context->commands.xnz_bt = XNZ_BT_TBM9;
+                        global_context->commands.xnz_et = XNZ_ET_TBM9;
+                        global_context->commands.xnz_pb = XNZ_PB_TBM9;
+                        global_context->         xnz_tt = XNZ_TT_TBM9;
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Diamond_DA62"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (NULL == (global_context->commands.et.da62.drf_mod_ec1 = XPLMFindDataRef("aerobask/eng/sw_ecu_ab1")) ||
+                        NULL == (global_context->commands.et.da62.drf_mod_ec2 = XPLMFindDataRef("aerobask/eng/sw_ecu_ab2")) ||
+                        NULL == (global_context->commands.et.da62.cmd_ecu1_up = XPLMFindCommand("aerobask/eng/ecu_ab1_up")) ||
+                        NULL == (global_context->commands.et.da62.cmd_ecu1_dn = XPLMFindCommand("aerobask/eng/ecu_ab1_dn")) ||
+                        NULL == (global_context->commands.et.da62.cmd_ecu2_up = XPLMFindCommand("aerobask/eng/ecu_ab2_up")) ||
+                        NULL == (global_context->commands.et.da62.cmd_ecu2_dn = XPLMFindCommand("aerobask/eng/ecu_ab2_dn")) ||
+                        NULL == (global_context->commands.et.da62.cmd_e_1_onn = XPLMFindCommand("aerobask/eng/master1_up")) ||
+                        NULL == (global_context->commands.et.da62.cmd_e_1_off = XPLMFindCommand("aerobask/eng/master1_dn")) ||
+                        NULL == (global_context->commands.et.da62.cmd_e_2_onn = XPLMFindCommand("aerobask/eng/master2_up")) ||
+                        NULL == (global_context->commands.et.da62.cmd_e_2_off = XPLMFindCommand("aerobask/eng/master2_dn")))
+                    {
+                        xnz_log("[error]: could not self-configure for DA62\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_ab = XNZ_AB_NONE;
+                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_at = XNZ_AT_NONE;
+                        global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                        global_context->commands.xnz_et = XNZ_ET_DA62;
+                        global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                        global_context->         xnz_tt = XNZ_TT_XPLM;
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Phenom_300"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (NULL == (global_context->commands.et.e55p.drf_e_1_ign = XPLMFindDataRef("aerobask/engines/sw_ignition_1"    )) ||
+                        NULL == (global_context->commands.et.e55p.drf_e_2_ign = XPLMFindDataRef("aerobask/engines/sw_ignition_2"    )) ||
+                        NULL == (global_context->commands.et.e55p.drf_e_1_knb = XPLMFindDataRef("aerobask/engines/knob_start_stop_1")) ||
+                        NULL == (global_context->commands.et.e55p.drf_e_2_knb = XPLMFindDataRef("aerobask/engines/knob_start_stop_2")) ||
+                        NULL == (global_context->commands.et.e55p.cmd_ig_1_up = XPLMFindCommand("aerobask/engines/ignition_1_up"    )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_ig_1_dn = XPLMFindCommand("aerobask/engines/ignition_1_dn"    )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_ig_2_up = XPLMFindCommand("aerobask/engines/ignition_2_up"    )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_ig_2_dn = XPLMFindCommand("aerobask/engines/ignition_2_dn"    )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_e_1_lft = XPLMFindCommand("aerobask/engines/knob_1_lt"        )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_e_1_rgt = XPLMFindCommand("aerobask/engines/knob_1_rt"        )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_e_2_lft = XPLMFindCommand("aerobask/engines/knob_2_lt"        )) ||
+                        NULL == (global_context->commands.et.e55p.cmd_e_2_rgt = XPLMFindCommand("aerobask/engines/knob_2_rt"       )))
+                    {
+                        xnz_log("[error]: could not self-configure for E55P\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_ab = XNZ_AB_NONE;
+                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_at = XNZ_AT_NONE; // note: CSC controlled via A/P panel only
+                        global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                        global_context->commands.xnz_et = XNZ_ET_E55P;
+                        global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                        global_context->         xnz_tt = XNZ_TT_XPLM;
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Victory G1000"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (NULL == (global_context->commands.et.evic.drf_fuel_at = XPLMFindDataRef("aerobask/lt_fuel_auto"           )) ||
+                        NULL == (global_context->commands.et.evic.cmd_e_1_onn = XPLMFindCommand("sim/fuel/fuel_pump_1_on"         )) ||
+                        NULL == (global_context->commands.et.evic.cmd_e_1_off = XPLMFindCommand("sim/fuel/fuel_pump_1_off"        )) ||
+                        NULL == (global_context->commands.et.evic.cmd_x_12_rt = XPLMFindCommand("sim/starters/shut_down_1"        )) ||
+                        NULL == (global_context->commands.et.evic.cmd_e_2_tog = XPLMFindCommand("aerobask/fuel_auto_toggle"       )) ||
+                        NULL == (global_context->commands.et.evic.cmd_x_12_lt = XPLMFindCommand("sim/starters/engage_starter_1"   )) ||
+                        NULL == (global_context->commands.et.evic.cmd_m_12_st = XPLMFindCommand("sim/igniters/igniter_contin_on_1")) ||
+                        NULL == (global_context->commands.et.evic.cmd_m_12_no = XPLMFindCommand("sim/igniters/igniter_contin_off_1")))
+                    {
+                        xnz_log("[error]: could not self-configure for EVIC\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_ab = XNZ_AB_NONE;
+                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_at = XNZ_AT_NONE; // note: CSC controlled via A/P panel only
+                        global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                        global_context->commands.xnz_et = XNZ_ET_EVIC;
+                        global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                        global_context->         xnz_tt = XNZ_TT_XPLM;
+                    }
+                }
+                /* must test SASL and Gizmo last */
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim.sasl"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (auth_desc_icao)
+                    {
+                        if (!strncasecmp(auth, "Denis 'ddenn' Krupin", strlen("Denis 'ddenn' Krupin")) &&
+                            !strncasecmp(desc, "Bombardier Challenger 300", strlen("Bombardier Challenger 300")))
+                        {
+                            global_context->commands.xnz_ab = XNZ_AB_NONE;
+                            global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                            global_context->commands.xnz_at = XNZ_AT_NONE; // note: MACH HOLD controlled via dedicated button only
+                            global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                            global_context->commands.xnz_et = XNZ_ET_CL30;
+                            global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                            global_context->         xnz_tt = XNZ_TT_XPLM;
+                        }
+                        else if (!strncasecmp(auth, "Aerobask", strlen("Aerobask")) ||
+                                 !strncasecmp(auth, "Stephane Buon", strlen("Stephane Buon")))
+                        {
+                            if (!strncasecmp(icao, "EA50", strlen("EA50")))
                             {
-                                dref_read_str(ref, icao, sizeof(icao));
-                                if (!strncasecmp(auth, "Denis 'ddenn' Krupin", strlen("Denis 'ddenn' Krupin")) &&
-                                    !strncasecmp(desc, "Bombardier Challenger 300", strlen("Bombardier Challenger 300")))
+                                if (NULL == (global_context->commands.et.ea50.drf_mod_en1 = XPLMFindDataRef("aerobask/eclipse/start_eng_0")) ||
+                                    NULL == (global_context->commands.et.ea50.drf_mod_en2 = XPLMFindDataRef("aerobask/eclipse/start_eng_1")))
                                 {
-                                    global_context->xnz_tt = XNZ_TT_DDCL;
+                                    xnz_log("[error]: could not self-configure for EA50\n");
+                                    global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                                    global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                                    global_context->commands.xnz_at = XNZ_AT_ERRR;
+                                    global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                                    global_context->commands.xnz_et = XNZ_ET_ERRR;
+                                    global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                                    global_context->         xnz_tt = XNZ_TT_ERRR;
+                                }
+                                else
+                                {
+                                    global_context->commands.xnz_ab = XNZ_AB_NONE;
+                                    global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                                    global_context->commands.xnz_at = XNZ_AT_XPLM;
+                                    global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                                    global_context->commands.xnz_et = XNZ_ET_EA50;
+                                    global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                                    global_context->         xnz_tt = XNZ_TT_XPLM;
                                 }
                             }
                         }
                     }
                 }
-                xnz_log("determined throttle type %d\n", global_context->xnz_tt);
+                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("gizmo.x-plugins.com"))) && (XPLMIsPluginEnabled(test))))
+                {
+                    if (auth_desc_icao)
+                    {
+                        if (!strncasecmp(auth, "IXEG", strlen("IXEG")) &&
+                            !strncasecmp(desc, "Boeing 737-300", strlen("Boeing 737-300")))
+                        {
+                            if (NULL == (global_context->commands.et.ix73.drf_e_1_cut = XPLMFindDataRef("ixeg/733/fuel/fuel_start_lever1_act")) ||
+                                NULL == (global_context->commands.et.ix73.drf_e_2_cut = XPLMFindDataRef("ixeg/733/fuel/fuel_start_lever2_act")) ||
+                                NULL == (global_context->commands.at.comm.cmd_at_disc = XPLMFindCommand("ixeg/733/autopilot/at_disengage")) ||
+                                NULL == (global_context->commands.et.ix73.drf_e_1_knb = XPLMFindDataRef("ixeg/733/engine/eng1_start_act")) ||
+                                NULL == (global_context->commands.et.ix73.drf_e_2_knb = XPLMFindDataRef("ixeg/733/engine/eng2_start_act")) ||
+                                NULL == (global_context->commands.at.comm.cmd_at_toga = XPLMFindCommand("sim/engines/TOGA_power")))
+                            {
+                                xnz_log("[error]: could not self-configure for IXEG 737 Classic\n");
+                                global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                                global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                                global_context->commands.xnz_at = XNZ_AT_ERRR;
+                                global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                                global_context->commands.xnz_et = XNZ_ET_ERRR;
+                                global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                                global_context->         xnz_tt = XNZ_TT_ERRR;
+                            }
+                            else
+                            {
+                                global_context->commands.xnz_ab = XNZ_AB_IX33;
+//                                global_context->commands.xnz_ap = XNZ_AP_COMM;
+                                global_context->commands.xnz_at = XNZ_AT_COMM;
+                                global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                                global_context->commands.xnz_et = XNZ_ET_IX73;
+                                global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                                global_context->         xnz_tt = XNZ_TT_XPLM;
+                            }
+                        }
+                    }
+                }
+                if (global_context->xnz_tt == XNZ_TT_XPLM)
+                {
+#ifdef PUBLIC_RELEASE_BUILD
+                    // TODO: per-aircraft configuration file (initialized by user via custom commands)
+#else
+                    switch (global_context->commands.xnz_et)
+                    {
+                        case XNZ_ET_DA62:
+                            global_context->zones_info.share[ZONE_CLB] = 0.44975f; // 45% - 0.1% / 2 / 2 safety margin
+                            global_context->zones_info.share[ZONE_FLX] = 0.74975f - global_context->zones_info.share[ZONE_CLB]; // 75% - 0.1% / 2 / 2 safety margin
+                            global_context->zones_info.share[ZONE_TGA] = 0.94975f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~95%
+                            break;
+
+                        case XNZ_ET_EA50:
+                            global_context->zones_info.share[ZONE_CLB] = 0.450f; // 50% travel (< ~60% N1)
+                            global_context->zones_info.share[ZONE_FLX] = 0.675f - global_context->zones_info.share[ZONE_CLB]; // 75% travel
+                            global_context->zones_info.share[ZONE_TGA] = 0.900f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~94.5% N1
+                            break;
+
+                        case XNZ_ET_EVIC:
+                            global_context->zones_info.share[ZONE_CLB] = 0.2935f; // 1/3 travel (~55% N1)
+                            global_context->zones_info.share[ZONE_FLX] = 0.5870f - global_context->zones_info.share[ZONE_CLB]; // 2/3 travel
+                            global_context->zones_info.share[ZONE_TGA] = 0.8805f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~94.5% N1
+                            break;
+
+                        default:
+                            break;
+                    }
+#endif
+                }
+                xnz_log("determined engine type %d\n",     global_context->commands.xnz_et);
+                xnz_log("determined braking type %d\n",    global_context->commands.xnz_bt);
+                xnz_log("determined a/brake type %d\n",    global_context->commands.xnz_ab);
+                xnz_log("determined a/pilot type %d\n",    global_context->commands.xnz_ap);
+                xnz_log("determined throttle type %d\n",   global_context->         xnz_tt);
+                xnz_log("determined a/thrust type %d\n",   global_context->commands.xnz_at);
+                xnz_log("determined park brake type %d\n", global_context->commands.xnz_pb);
 
                 /* TCA thrust quadrant support */
                 if (global_context->idx_throttle_axis_1 < 0)
@@ -760,60 +2197,19 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 if (global_context->idx_throttle_axis_1 >= 0)
                 {
-                    int acf_en_type[3], acf_en_num = XPLMGetDatai(global_context->i_ngine_num);
-                    if (acf_en_num >= 2) // some Carenado have extra engine 4 special effects
+#ifdef PUBLIC_RELEASE_BUILD
+                    // TODO: implement A320 API support
+                    if (global_context->xnz_tt == XNZ_TT_FF32)
                     {
-                        if (acf_en_num > 3)
-                        {
-                            acf_en_num = 3; // whether we have at least 3 engines of same type
-                        }
-                        XPLMGetDatavi(global_context->i_ngine_typ, acf_en_type, 0, acf_en_num);
-                        int dummy = acf_en_type[acf_en_num - 1] != acf_en_type[acf_en_num - 2];
-                        global_context->asymmetrical_thrust = !(((2 != (acf_en_num - dummy))));
+                        int th_axis_ass[2] = { 20, 21, };
+                        xnz_log("[info]: releasing joystick axes (XNZ_TT_FF32)\n");
+                        XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
                     }
                     else
-                    {
-                        global_context->asymmetrical_thrust = 0;
-                    }
-                    switch (acf_en_type[0])
-                    {
-                        case 2: // turboprop
-                        case 8: // turboprop
-                            global_context->acf_has_beta_thrust = XPLMGetDatai(global_context->rev_info[0]) != 0;
-                            global_context->acft_has_rev_thrust =
-                            (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
-                             XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
-                            break;
-
-                        case 4: // turbojet
-                        case 5: // turbofan
-                            global_context->acf_has_beta_thrust = 0;
-                            global_context->acft_has_rev_thrust =
-                            (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
-                             XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
-                            break;
-
-                        default:
-                            global_context->acf_has_beta_thrust = 0;
-                            global_context->acft_has_rev_thrust = 0;
-                            break;
-                    }
-                    if (global_context->idx_throttle_axis_1 >= 0)
-                    {
-#ifdef PUBLIC_RELEASE_BUILD
-                        // TODO: implement A320 API support
-                        if (global_context->xnz_tt == XNZ_TT_FF32)
-                        {
-                            int th_axis_ass[2] = { 20, 21, };
-                            xnz_log("[info]: releasing joystick axes (XNZ_TT_FF32)\n");
-                            XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
-                        }
-                        else
 #endif
-                        {
-                            int no_axis_ass[2] = { 0, 0, };
-                            XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
-                        }
+                    {
+                        int no_axis_ass[2] = { 0, 0, };
+                        XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
                     }
                     global_context->skip_idle_overwrite = 0;
                     XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
@@ -848,6 +2244,34 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     }
 }
 
+static int autothrottle_active(xnz_context *ctx)
+{
+    switch (ctx->commands.xnz_at)
+    {
+        case XNZ_AT_FF32:
+        case XNZ_AT_TOLI:
+            return 0;
+
+        default:
+            if (ctx->xnz_tt == XNZ_TT_XPLM)
+            {
+                return 0 < XPLMGetDatai(ctx->commands.xp.auto_thr_on);
+            }
+            break;
+    }
+    return 0;
+}
+
+static int servos_on(xnz_context *ctx)
+{
+    switch (ctx->commands.xnz_ap)
+    {
+        default:
+            break;
+    }
+    return 0 < XPLMGetDatai(ctx->commands.xp.auto_pil_on);
+}
+
 #ifndef PUBLIC_RELEASE_BUILD
 static float callback_hdlr(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
@@ -872,64 +2296,17 @@ static float callback_hdlr(float inElapsedSinceLastCall,
             XPLMSetDataf(ctx->acf_roll_co, ctx->nominal_roll_coef);
         }
 
-        if (ctx->xnz_tt == XNZ_TT_FF32 && !ctx->ff32.api_has_initialized)
+        if (ctx->xnz_tt == XNZ_TT_FF32 && !ctx->tt.ff32.api_has_initialized)
         {
-            XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->ff32.s);
-            if (ctx->ff32.s.DataVersion != NULL && ctx->ff32.s.DataAddUpdate != NULL)
+            XPLMSendMessageToPlugin(XPLMFindPluginBySignature(XPLM_FF_SIGNATURE), XPLM_FF_MSG_GET_SHARED_INTERFACE, &ctx->tt.ff32.s);
+            if (ctx->tt.ff32.s.DataVersion != NULL && ctx->tt.ff32.s.DataAddUpdate != NULL)
             {
-                ctx->ff32.id_f32_eng_lever_lt = ctx->ff32.s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever1");
-                ctx->ff32.id_f32_eng_lever_rt = ctx->ff32.s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever2");
-                if (ctx->ff32.id_f32_eng_lever_lt > -1 && ctx->ff32.id_f32_eng_lever_rt > -1)
+                ctx->tt.ff32.id_f32_eng_lever_lt = ctx->tt.ff32.s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever1");
+                ctx->tt.ff32.id_f32_eng_lever_rt = ctx->tt.ff32.s.ValueIdByName("Aircraft.Cockpit.Pedestal.EngineLever2");
+                if (ctx->tt.ff32.id_f32_eng_lever_lt > -1 && ctx->tt.ff32.id_f32_eng_lever_rt > -1)
                 {
-                    ctx->ff32.api_has_initialized = 1;
+                    ctx->tt.ff32.api_has_initialized = 1;
                 }
-            }
-        }
-
-        /* check autopilot and autothrust status */
-        int autopilot_servos_on = 0, autothrottle_active = 0;
-        size_t ip1 = 0, ip2 = sizeof(ctx->i_servos) / sizeof(ctx->i_servos[0]);
-        size_t fp1 = 0, fp2 = sizeof(ctx->f_servos) / sizeof(ctx->f_servos[0]);
-        size_t ia1 = 0, ia2 = sizeof(ctx->i_autoth) / sizeof(ctx->i_autoth[0]);
-        size_t fa1 = 0, fa2 = sizeof(ctx->f_autoth) / sizeof(ctx->f_autoth[0]);
-        while (autopilot_servos_on == 0 && ip1 < ip2 && NULL != ctx->i_servos[ip1])
-        {
-            if (XPLMGetDatai(ctx->i_servos[ip1]) > 0)
-            {
-                autopilot_servos_on = 1;
-                break;
-            }
-            ip1++; continue;
-        }
-        while (autopilot_servos_on == 0 && fp1 < fp2 && NULL != ctx->f_servos[fp1])
-        {
-            if (XPLMGetDataf(ctx->f_servos[fp1]) > 0.5f)
-            {
-                autopilot_servos_on = 1;
-                break;
-            }
-            fp1++; continue;
-        }
-        // default aircraft: check A/T
-        if (ctx->xnz_tt == XNZ_TT_XPLM)
-        {
-            while (autothrottle_active == 0 && ia1 < ia2 && NULL != ctx->i_autoth[ia1])
-            {
-                if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
-                {
-                    autothrottle_active = 1;
-                    break;
-                }
-                ia1++; continue;
-            }
-            while (autothrottle_active == 0 && fa1 < fa2 && NULL != ctx->f_autoth[fa1])
-            {
-                if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
-                {
-                    autothrottle_active = 1;
-                    break;
-                }
-                fa1++; continue;
             }
         }
 
@@ -938,11 +2315,11 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             case XNZ_TT_FF32:
             {
-                if (ctx->ff32.api_has_initialized)
+                if (ctx->tt.ff32.api_has_initialized)
                 {
                     // Pedestal.EngineLever*: 0-20-65 (reverse-idle-max)
-                    ctx->ff32.s.ValueGet(ctx->ff32.id_f32_eng_lever_lt, &array[0]);
-                    ctx->ff32.s.ValueGet(ctx->ff32.id_f32_eng_lever_rt, &array[1]);
+                    ctx->tt.ff32.s.ValueGet(ctx->tt.ff32.id_f32_eng_lever_lt, &array[0]);
+                    ctx->tt.ff32.s.ValueGet(ctx->tt.ff32.id_f32_eng_lever_rt, &array[1]);
                     if ((f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 45.0f) < 0.0f)
                     {
                         (f_throttall = (((array[0] + array[1]) / 2.0f) - 20.0f) / 20.0f);
@@ -950,24 +2327,56 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                     break;
                 }
             } // fallthrough
-            case XNZ_TT_SKIP:
+            case XNZ_TT_ERRR:
                 f_throttall = ctx->last_throttle_all;
                 break;
 
             case XNZ_TT_TOLI:
             {
-                XPLMGetDatavf(ctx->toli.f_thr_array, array, 0, 2);
+                XPLMGetDatavf(ctx->tt.toli.f_thr_array, array, 0, 2);
                 f_throttall = ((array[0] + array[1]) / 2.0f);
+                break;
+            }
+
+            case XNZ_TT_TBM9:
+            {
+                int engn_rng = XPLMGetDatai(ctx->tt.tbm9.engn_rng);
+                switch (engn_rng)
+                {
+                    case 3:
+                    case 4:
+                    case 5:
+                        if (HS_TBM9_IDLE > (f_throttall = XPLMGetDataf(ctx->f_throttall)))
+                        {
+                            f_throttall = (0.0f - (1.0f - (f_throttall / HS_TBM9_IDLE)));
+                            break;
+                        }
+                        f_throttall = ((f_throttall - HS_TBM9_IDLE) / (1.0f - HS_TBM9_IDLE));
+                        break;
+                    default:
+                        f_throttall = ctx->last_throttle_all;
+                        break;
+                }
                 break;
             }
 
             default:
             {
                 f_throttall = XPLMGetDataf(ctx->f_throttall);
+                if (ctx->acft_has_rev_thrust && f_throttall > 0.0f)
+                {
+                    XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
+                    if (ctx->i_propmode_value[0] == 3 || ctx->i_propmode_value[1] == 3)
+                    {
+                        f_throttall = 0.0f - f_throttall;
+                        break;
+                    }
+                    break;
+                }
                 break;
             }
         }
-        if (fabsf(ctx->last_throttle_all - f_throttall) >= 0.0025f)
+        if (fabsf(ctx->last_throttle_all - f_throttall) >= T_SMALL)
         {
             ctx->throttle_did_change = 1;
             ctx->show_throttle_all = 3.0f;
@@ -981,7 +2390,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
         if (ctx->show_throttle_all < T_ZERO ||
             ctx->ice_detect_positive ||
-            autothrottle_active)
+            autothrottle_active(ctx))
         {
             ctx->throttle_did_change = 0;
             ctx->show_throttle_all = 0.0f;
@@ -1020,12 +2429,16 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         {
             if (ctx->throttle_did_change)
             {
-                if (first_xplane_run == 0 &&
-                    ctx->tca_support_enabled != 0 &&
+                if (ctx->tca_support_enabled != 0 &&
                     ctx->idx_throttle_axis_1 >= 0 &&
-                    ctx->skip_idle_overwrite == 0)
+                    ctx->skip_idle_overwrite == 0 &&
+                    ctx->i_got_axis_input[0] != 0)
                 {
-                    snprintf(ctx->overly_txt_buf, 11, "%7.2f", f_throttall);
+                    snprintf(ctx->overly_txt_buf, 11, "%4.0f %%", f_throttall * 100.0f);
+                }
+                else if (f_throttall < (0.0f - T_ZERO))
+                {
+                    snprintf(ctx->overly_txt_buf, 11, "%7.4f", f_throttall);
                 }
                 else
                 {
@@ -1061,7 +2474,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
         }
 
         /* variable nullzones */
-        if (autopilot_servos_on)
+        if (servos_on(ctx))
         {
             XPLMSetDataf(ctx->nullzone[0], 0.500f);
             XPLMSetDataf(ctx->nullzone[1], 0.500f);
@@ -1144,7 +2557,33 @@ static inline float non_linear_centered(float linear_val)
 
 static inline float jitter_protection(float input)
 {
-    return roundf(input / 0.0025f) * 0.0025f;
+    return roundf(input / T_SMALL) * T_SMALL;
+}
+
+static inline float throttle_mapping_abe55p(float input, thrust_zones z)
+{
+    if (input > z.min[ZONE_TGA])
+    {
+        return 0.8356f; // TO
+    }
+//  if (input > z.max[ZONE_FLX])
+//  {
+//      return 0.6986f; // CLB
+//  }
+    if (input > z.min[ZONE_FLX])
+    {
+        return 0.6986f; // CLB
+    }
+    if (input > z.max[ZONE_CLB])
+    {
+        return 0.5479f; // CRZ
+    }
+    if (input > z.min[ZONE_CLB])
+    {
+        float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
+        return jitter_protection(0.5205f * non_linear_centered(t));
+    }
+    return 0.0f; // no reverse
 }
 
 static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
@@ -1174,11 +2613,20 @@ static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
     {
         return 0.0f;
     }
+#ifdef PUBLIC_RELEASE_BUILD
+    if (input < z.min[ZONE_REV])
+    {
+        return -1.0f; // max reverse
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return jitter_protection(non_linear_standard(t)-1.0f); // non-linear reverse range
+#else
     if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 20.0f)))
     {
         return -1.0f; // max reverse
     }
-    return -0.125f; // idle reverse
+    return -0.1f; // idle reverse
+#endif
 }
 
 static inline float throttle_mapping_toliss(float input, thrust_zones z)
@@ -1208,14 +2656,23 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
     {
         return 0.0f;
     }
+#ifdef PUBLIC_RELEASE_BUILD
+    if (input < z.min[ZONE_REV])
+    {
+        return -1.0f; // max reverse
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return jitter_protection(non_linear_standard(t)-1.0f); // non-linear reverse range
+#else
     if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 20.0f)))
     {
         return -1.0f; // max reverse
     }
-    return -0.125f; // idle reverse
+    return -0.1f; // idle reverse
+#endif
 }
 
-static inline float throttle_mapping(float input, thrust_zones z)
+static inline float throttle_mapping_hstbm9(float input, thrust_zones z)
 {
     if (input > z.max[ZONE_TGA])
     {
@@ -1248,227 +2705,374 @@ static inline float throttle_mapping(float input, thrust_zones z)
     {
         return 0.0f;
     }
+    if (input < z.min[ZONE_REV])
+    {
+        return -1.0f; // max reverse
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return jitter_protection(non_linear_standard(t)-1.0f); // beta and reverse ranges
+}
+
+static inline float throttle_mapping_w_rev(float input, thrust_zones z)
+{
+    if (input > z.max[ZONE_TGA])
+    {
+        return z.share[ZONE_TGA] + z.share[ZONE_FLX] + z.share[ZONE_CLB]; // max forward (may be less than 1.0f)
+    }
+    if (input > z.min[ZONE_TGA])
+    {
+        float t = ((input - z.min[ZONE_TGA]) / z.len[ZONE_TGA]);
+        return jitter_protection(z.share[ZONE_TGA] * linear_standard(t) + z.share[ZONE_FLX] + z.share[ZONE_CLB]);
+    }
+    if (input > z.max[ZONE_FLX])
+    {
+        return z.share[ZONE_FLX] + z.share[ZONE_CLB];
+    }
+    if (input > z.min[ZONE_FLX])
+    {
+        float t = ((input - z.min[ZONE_FLX]) / z.len[ZONE_FLX]);
+        return jitter_protection(z.share[ZONE_FLX] * linear_standard(t) + z.share[ZONE_CLB]);
+    }
+    if (input > z.max[ZONE_CLB])
+    {
+        return z.share[ZONE_CLB];
+    }
+    if (input > z.min[ZONE_CLB])
+    {
+        float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
+        return jitter_protection(z.share[ZONE_CLB] * linear_standard(t));
+    }
+    if (input > z.max[ZONE_REV])
+    {
+        return 0.0f;
+    }
+#ifdef PUBLIC_RELEASE_BUILD
+    if (input < z.min[ZONE_REV])
+    {
+        return -1.0f; // max reverse
+    }
+    float t = (input - z.min[ZONE_REV]) / z.len[ZONE_REV];
+    return jitter_protection(non_linear_standard(t)-1.0f); // non-linear reverse range
+#else
     if (input < (z.min[ZONE_REV] + (z.len[ZONE_REV] / 20.0f)))
     {
         return -1.0f; // max reverse
     }
-    return -0.125f; // idle reverse
+    return -0.1f; // idle reverse
+#endif
 }
 
-static float throttle_hdlr(float inElapsedSinceLastCall,
+static inline float throttle_mapping(float input, thrust_zones z)
+{
+    if (input > z.max[ZONE_TGA])
+    {
+        return z.share[ZONE_TGA] + z.share[ZONE_FLX] + z.share[ZONE_CLB]; // max forward (may be less than 1.0f)
+    }
+    if (input > z.min[ZONE_TGA])
+    {
+        float t = ((input - z.min[ZONE_TGA]) / z.len[ZONE_TGA]);
+        return jitter_protection(z.share[ZONE_TGA] * linear_standard(t) + z.share[ZONE_FLX] + z.share[ZONE_CLB]);
+    }
+    if (input > z.max[ZONE_FLX])
+    {
+        return z.share[ZONE_FLX] + z.share[ZONE_CLB];
+    }
+    if (input > z.min[ZONE_FLX])
+    {
+        float t = ((input - z.min[ZONE_FLX]) / z.len[ZONE_FLX]);
+        return jitter_protection(z.share[ZONE_FLX] * linear_standard(t) + z.share[ZONE_CLB]);
+    }
+    if (input > z.max[ZONE_CLB])
+    {
+        return z.share[ZONE_CLB];
+    }
+    if (input > z.min[ZONE_CLB])
+    {
+        float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
+        return jitter_protection(z.share[ZONE_CLB] * linear_standard(t));
+    }
+    return 0.0f; // no reverse
+}
+
+static int fwd_beta_rev_thrust_for_index(xnz_context *ctx, float f_stick_val[1], int i)
+{
+    if (ctx->i_propmode_value[i] < 1 || // probably feathered
+        ctx->i_propmode_value[i] > 3)  // should never happen
+    {
+        f_stick_val[0] = 0.0f;
+        return 0;
+    }
+    if ((T_ZERO + f_stick_val[0]) < 0.0f) // reverse or beta range
+    {
+        if ((T_ZERO + f_stick_val[0]) >= -0.5f) // beta range or idle reverse
+        {
+            if (ctx->acf_has_beta_thrust) // TODO: implement
+            {
+                f_stick_val[0] = 0.0f;
+                return 0;
+            }
+        }
+        if (ctx->acft_has_rev_thrust)
+        {
+            if (ctx->i_propmode_value[i] != 3)
+            {
+                XPLMCommandOnce(ctx->revto[i]);
+                return 1;
+            }
+            f_stick_val[0] = fabsf(f_stick_val[0]);
+            return 0;
+        }
+        f_stick_val[0] = 0.0f;
+        return 0;
+    }
+    if (ctx->acf_has_beta_thrust && ctx->i_propmode_value[i] == 2)
+    {
+        XPLMCommandOnce(ctx->betto[i]);
+        return 1;
+    }
+    if (ctx->acft_has_rev_thrust && ctx->i_propmode_value[i] == 3)
+    {
+        XPLMCommandOnce(ctx->revto[i]);
+        return 1;
+    }
+    return 0;
+}
+static int fwd_beta_rev_thrust(xnz_context *ctx, float f_stick_val[2])
+{
+    switch (ctx->xnz_tt)
+    {
+        case XNZ_TT_TOLI:
+            return 0; // handled by ToLiSS plugin based on positive/begative value of f_stick_val
+
+        case XNZ_TT_TBM9:
+            if ((T_ZERO + f_stick_val[0]) < 0.0f)
+            {
+                if (XPLMGetDatai(ctx->tt.tbm9.engn_rng) == 3)
+                {
+                    XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE - T_ZERO); // flight -> taxi range
+                    XPLMCommandOnce(ctx->revto[8]); // lift gate (engn_rng goes from 3 to 4)
+                    return 1;
+                }
+                return 0;
+            }
+            if (XPLMGetDatai(ctx->tt.tbm9.engn_rng) > 3)
+            {
+                XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE + T_ZERO); // beta/reverse -> flight idle
+                return 1;
+            }
+            return 0;
+
+        default:
+            break;
+    }
+    if (ctx->arcrft_engine_count == 2)
+    {
+        int l = fwd_beta_rev_thrust_for_index(ctx, &f_stick_val[0], 0);
+        int r = fwd_beta_rev_thrust_for_index(ctx, &f_stick_val[1], 1);
+        return (l + r) > 0;
+    }
+    else
+    {
+        int toggled_count = fwd_beta_rev_thrust_for_index(ctx, &f_stick_val[0], 0);
+        for (int i = 1; i < ctx->arcrft_engine_count; i++)
+        {
+            toggled_count += fwd_beta_rev_thrust_for_index(ctx, &f_stick_val[0], i);
+        }
+        return toggled_count > 0;
+    }
+    return 0;
+}
+
+static int skip_idle_overwrite(xnz_context *ctx, float f_stick_val[2])
+{
+    if (0.0f == f_stick_val[0] && (ctx->arcrft_engine_count < 2 || f_stick_val[1] == 0.0f))
+    {
+        /*
+         * as soon as the user overrides the throttle via commands, then
+         * f_throttall is no longer zero, so we need the return 1 clause
+         * before we check the latter, else we will keep overwriting any
+         * throttle ratio modifications triggered by the user; hence, we
+         * must have it here early, otherwise said override is pointless
+         */
+        if (ctx->skip_idle_overwrite > 9)
+        {
+            return 1;
+        }
+        float f_simul_val[2];
+        switch (ctx->xnz_tt)
+        {
+            case XNZ_TT_FF32: // TODO: implement
+                return ctx->skip_idle_overwrite = 0;
+
+            case XNZ_TT_TBM9:
+                if (fabsf((f_simul_val[0] = (XPLMGetDataf(ctx->f_throttall) - HS_TBM9_IDLE)) - 0.0f) < T_ZERO)
+                {
+                    f_simul_val[0] = 0.0f;
+                }
+                break;
+
+            case XNZ_TT_TOLI:
+                XPLMGetDatavf(ctx->tt.toli.f_thr_array, f_simul_val, 0, 2);
+                break;
+
+            default:
+                f_simul_val[0] = f_simul_val[1] = XPLMGetDataf(ctx->f_throttall);
+                break;
+        }
+        if (0.0f == f_simul_val[0] && (ctx->arcrft_engine_count < 2 || f_simul_val[1] == 0.0f))
+        {
+            for (int i = 0; i < ctx->arcrft_engine_count; i++)
+            {
+                switch (ctx->xnz_tt)
+                {
+                    case XNZ_TT_FF32: // TODO: implement
+                        return ctx->skip_idle_overwrite = 0;
+
+                    case XNZ_TT_TBM9:
+                        if (XPLMGetDatai(ctx->tt.tbm9.engn_rng) != 3)
+                        {
+                            return ctx->skip_idle_overwrite = 0;
+                        }
+                        break;
+
+                    default:
+                        if (ctx->i_propmode_value[i] != 1)
+                        {
+                            return ctx->skip_idle_overwrite = 0;
+                        }
+                        break;
+                }
+                continue;
+            }
+            ctx->skip_idle_overwrite++;
+            return 0;
+        }
+        return ctx->skip_idle_overwrite = 0;
+    }
+    return ctx->skip_idle_overwrite = 0;
+}
+
+static void throttle_axes(xnz_context *ctx)
+{
+    float f_stick_val[2];
+    XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
+    XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, ctx->arcrft_engine_count);
+    if (autothrottle_active(ctx))
+    {
+        return;
+    }
+    if (ctx->i_got_axis_input[0] == 0)
+    {
+        if (f_stick_val[0] < TCA_DEADBAND || f_stick_val[1] < TCA_DEADBAND)
+        {
+            return; // haven't received input from hardware yet
+        }
+        ctx->i_got_axis_input[0] = 1;
+    }
+#ifdef PUBLIC_RELEASE_BUILD
+    if (ctx->arcrft_engine_count != 2 || fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
+#endif
+    {
+        float sum = f_stick_val[0] + f_stick_val[1];
+        f_stick_val[0] = f_stick_val[1] = sum / 2.0f;
+    }
+    switch (ctx->xnz_tt)
+    {
+        case XNZ_TT_FF32: // TODO: implement
+            return;
+
+        case XNZ_TT_TOLI:
+            f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
+            f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1], ctx->zones_info);
+            break;
+
+        case XNZ_TT_TBM9:
+            if (XPLMGetDatai(ctx->tt.tbm9.engn_rng) < 3)
+            {
+                XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE);
+                return;
+            }
+            f_stick_val[0] = throttle_mapping_hstbm9(1.0f - f_stick_val[0], ctx->zones_info);
+            break;
+
+        default:
+            switch (ctx->commands.xnz_et)
+            {
+#ifndef PUBLIC_RELEASE_BUILD
+                case XNZ_ET_CL30:
+                    f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
+                    f_stick_val[1] = throttle_mapping_ddcl30(1.0f - f_stick_val[1], ctx->zones_info);
+                    break;
+
+                case XNZ_ET_E55P:
+                    f_stick_val[0] = throttle_mapping_abe55p(1.0f - f_stick_val[0], ctx->zones_info);
+                    f_stick_val[1] = throttle_mapping_abe55p(1.0f - f_stick_val[1], ctx->zones_info);
+                    break;
+#endif
+                default:
+                    if (ctx->acft_has_rev_thrust)
+                    {
+                        f_stick_val[0] = throttle_mapping_w_rev(1.0f - f_stick_val[0], ctx->zones_info);
+                        f_stick_val[1] = throttle_mapping_w_rev(1.0f - f_stick_val[1], ctx->zones_info);
+                        break;
+                    }
+                    f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
+                    f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1], ctx->zones_info);
+                    break;
+            }
+            break;
+    }
+    if (skip_idle_overwrite(ctx, f_stick_val))
+    {
+        return;
+    }
+    if (fwd_beta_rev_thrust(ctx, f_stick_val))
+    {
+        return;
+    }
+    switch (ctx->xnz_tt)
+    {
+        case XNZ_TT_TOLI:
+            XPLMSetDatavf(ctx->tt.toli.f_thr_array, f_stick_val, 0, 2);
+            return;
+
+        case XNZ_TT_TBM9:
+            if (XPLMGetDatai(ctx->tt.tbm9.engn_rng) > 3)
+            {
+                XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE + ((HS_TBM9_IDLE) * f_stick_val[0]));
+                return; // beta or reverse range
+            }
+            XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE + ((1.0f - HS_TBM9_IDLE) * f_stick_val[0]));
+            return; // flight range
+
+        default:
+            break;
+    }
+    if (ctx->arcrft_engine_count == 2)
+    {
+        XPLMSetDatavf(ctx->f_thr_array, f_stick_val, 0, 2);
+        return;
+    }
+    XPLMSetDataf(ctx->f_throttall, f_stick_val[0]);
+    return;
+}
+
+static float axes_hdlr_fnc(float inElapsedSinceLastCall,
                            float inElapsedTimeSinceLastFlightLoop,
                            int   inCounter,
                            void *inRefcon)
 {
     if (inRefcon)
     {
-        xnz_context *ctx = inRefcon;
-        float f_stick_val[2], f_thr_tolis[2], sum;
-        int symmetrical_thrust = !ctx->asymmetrical_thrust;
-
         /* shall we be doing something? */
-        if (ctx->tca_support_enabled == 0)
+        if (((xnz_context*)inRefcon)->tca_support_enabled == 0)
         {
             return (1.0f / 20.0f);
         }
-
-        /* check autothrust status */
-        if (ctx->xnz_tt == XNZ_TT_XPLM)
-        {   // Airbus A/T doesn't move levers, status not relevant for us
-            size_t ia1 = 0, ia2 = sizeof(ctx->i_autoth) / sizeof(ctx->i_autoth[0]);
-            size_t fa1 = 0, fa2 = sizeof(ctx->f_autoth) / sizeof(ctx->f_autoth[0]);
-            while (ia1 < ia2 && NULL != ctx->i_autoth[ia1])
-            {
-                if (XPLMGetDatai(ctx->i_autoth[ia1]) > 0)
-                {
-                    return (1.0f / 20.0f);
-                }
-                ia1++; continue;
-            }
-            while (fa1 < fa2 && NULL != ctx->f_autoth[fa1])
-            {
-                if (XPLMGetDataf(ctx->f_autoth[fa1]) > 0.5f)
-                {
-                    return (1.0f / 20.0f);
-                }
-                fa1++; continue;
-            }
-        }
-
-        /* now we read the raw axis values */
-        XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
-        XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
-        if (first_xplane_run)
-        {
-            if (f_stick_val[0] < TCA_DEADBAND || f_stick_val[1] < TCA_DEADBAND)
-            {
-                return (1.0f / 20.0f); // haven't received input from hardware yet
-            }
-            first_xplane_run = 0;
-        }
-        if (symmetrical_thrust || fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
-        {
-            symmetrical_thrust = 1;
-            sum = f_stick_val[0] + f_stick_val[1];
-            f_stick_val[0] = f_stick_val[1] = sum / 2.0f;
-        }
-        if (ctx->xnz_tt == XNZ_TT_FF32)
-        {
-            /*
-             * use the A320's native API to check the thrust levers' positions and X-Plane thrust up/down commands to move said levers up or down???
-             */
-            return (1.0f / 20.0f); // TODO: implement
-        }
-        if (ctx->xnz_tt == XNZ_TT_TOLI)
-        {
-            if (symmetrical_thrust)
-            {
-                f_stick_val[0] = f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
-                if (0.0f == f_stick_val[0])
-                {
-                    /*
-                     * Don't keep writing idle thrust over and over again.
-                     * This allows simmers to use other means of controlling aircraft
-                     * thrust when both TCA levers are set in an idle detent position.
-                     */
-                    if (ctx->skip_idle_overwrite > 9)
-                    {
-                        return (1.0f / 20.0f);
-                    }
-                    else
-                    {
-                        XPLMGetDatavf(ctx->toli.f_thr_array, f_thr_tolis, 0, 2);
-                    }
-                    if (f_thr_tolis[0] >= 0.0f && f_thr_tolis[1] >= 0.0f)
-                    {
-                        ctx->skip_idle_overwrite++;
-                    }
-                    else
-                    {
-                        ctx->skip_idle_overwrite = 0;
-                    }
-                }
-                else
-                {
-                    ctx->skip_idle_overwrite = 0;
-                }
-                XPLMSetDatavf(ctx->toli.f_thr_array, f_stick_val, 0, 2);
-                return (1.0f / 20.0f);
-            }
-            f_stick_val[0] = throttle_mapping_toliss(1.0f - f_stick_val[0], ctx->zones_info);
-            f_stick_val[1] = throttle_mapping_toliss(1.0f - f_stick_val[1], ctx->zones_info);
-            XPLMSetDatavf(ctx->toli.f_thr_array, f_stick_val, 0, 2);
-            return (1.0f / 20.0f);
-        }
-        if (symmetrical_thrust)
-        {
-            if (ctx->xnz_tt == XNZ_TT_DDCL)
-            {
-                f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
-            }
-            else
-            {
-                f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
-            }
-            // TODO: implement: Beta thrust support!!!
-            if (ctx->acft_has_rev_thrust && f_stick_val[0] < 0.0f)
-            {
-                if (ctx->i_propmode_value[0] < 3)
-                {
-                    XPLMCommandOnce(ctx->rev_togg);
-                }
-            }
-            else
-            {
-                if (f_stick_val[0] < 0.0f)
-                {
-                    f_stick_val[0] = 0.0f;
-                }
-                if (ctx->i_propmode_value[0] > 1)
-                {
-                    XPLMCommandOnce(ctx->rev_togg);
-                }
-            }
-            if (0.0f == f_stick_val[0])
-            {
-                /*
-                 * Don't keep writing idle thrust over and over again.
-                 * This allows simmers to use other means of controlling aircraft
-                 * thrust when both TCA levers are set in an idle detent position.
-                 */
-                if (ctx->skip_idle_overwrite > 9)
-                {
-                    return (1.0f / 20.0f);
-                }
-                if (ctx->i_propmode_value[0] == 1 && ctx->i_propmode_value[1] == 1)
-                {
-                    ctx->skip_idle_overwrite++;
-                }
-                else
-                {
-                    ctx->skip_idle_overwrite = 0;
-                }
-            }
-            else
-            {
-                ctx->skip_idle_overwrite = 0;
-            }
-            XPLMSetDataf(ctx->f_throttall, fabsf(f_stick_val[0]));
-            return (1.0f / 20.0f);
-        }
-        if (ctx->xnz_tt == XNZ_TT_DDCL)
-        {
-            f_stick_val[0] = throttle_mapping_ddcl30(1.0f - f_stick_val[0], ctx->zones_info);
-            f_stick_val[1] = throttle_mapping_ddcl30(1.0f - f_stick_val[1], ctx->zones_info);
-        }
-        else
-        {
-            f_stick_val[0] = throttle_mapping(1.0f - f_stick_val[0], ctx->zones_info);
-            f_stick_val[1] = throttle_mapping(1.0f - f_stick_val[1], ctx->zones_info);
-        }
-        // TODO: implement: Beta thrust support!!!
-        if (ctx->acft_has_rev_thrust && f_stick_val[0] < 0.0f)
-        {
-            if (ctx->i_propmode_value[0] < 3)
-            {
-                XPLMCommandOnce(ctx->rev_tog1);
-            }
-        }
-        else
-        {
-            if (f_stick_val[0] < 0.0f)
-            {
-                f_stick_val[0] = 0.0f;
-            }
-            if (ctx->i_propmode_value[0] > 1)
-            {
-                XPLMCommandOnce(ctx->rev_tog1);
-            }
-        }
-        if (ctx->acft_has_rev_thrust && f_stick_val[1] < 0.0f)
-        {
-            if (ctx->i_propmode_value[1] < 3)
-            {
-                XPLMCommandOnce(ctx->rev_tog2);
-            }
-        }
-        else
-        {
-            if (f_stick_val[1] < 0.0f)
-            {
-                f_stick_val[1] = 0.0f;
-            }
-            if (ctx->i_propmode_value[1] > 1)
-            {
-                XPLMCommandOnce(ctx->rev_tog2);
-            }
-        }
-        f_stick_val[0] = fabsf(f_stick_val[0]);
-        f_stick_val[1] = fabsf(f_stick_val[1]);
-        XPLMSetDatavf(ctx->f_thr_array, f_stick_val, 0, 2);
+        throttle_axes(inRefcon);
         return (1.0f / 20.0f);
     }
-    XPLMDebugString(XNZ_LOG_PREFIX"[error]: throttle_hdlr: inRefcon == NULL, disabling callback\n");
+    XPLMDebugString(XNZ_LOG_PREFIX"[error]: callback_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
 }
 
@@ -1517,6 +3121,1792 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
     return;
 }
 
+static int parking_brake_get(xnz_cmd_context *commands)
+{
+    if (commands)
+    {
+        switch (commands->xnz_pb)
+        {
+            case XNZ_PB_FF35:
+                return !XPLMGetDatai(commands->pb.ff35.pbrak_offon);
+
+            case XNZ_PB_TO32:
+                return !!XPLMGetDatai(commands->pb.to32.pbrak_onoff);
+
+            case XNZ_PB_TBM9:
+                return 1.0f <= XPLMGetDataf(commands->pb.tbm9.pbrak_ratio);
+
+            case XNZ_PB_XPLM:
+                if (commands->xp.pbrak_onoff < 0)
+                {
+                    commands->xp.pbrak_onoff = 1.0f <= XPLMGetDataf(commands->xp.pbrak_ratio);
+                }
+                return !!commands->xp.pbrak_onoff;
+
+            case XNZ_PB_ERRR:
+            default:
+                return -1;
+        }
+        return -1;
+    }
+    return -1;
+}
+
+static int parking_brake_set(xnz_cmd_context *commands, int set)
+{
+    if (commands)
+    {
+        switch (commands->xnz_pb)
+        {
+            case XNZ_PB_FF35:
+                if (set)
+                {
+                    XPLMSetDatai(commands->pb.ff35.pbrak_offon, 0);
+                    return 0;
+                }
+                XPLMSetDatai(commands->pb.ff35.pbrak_offon, 1);
+                return 0;
+
+            case XNZ_PB_TO32:
+                if (set)
+                {
+                    XPLMSetDatai(commands->pb.to32.pbrak_onoff, 1);
+                    return 0;
+                }
+                XPLMSetDatai(commands->pb.to32.pbrak_onoff, 0);
+                return 0;
+
+            case XNZ_PB_TBM9:
+                if (set)
+                {
+                    if (commands->xnz_bt == XNZ_BT_TBM9)
+                    {
+                        float barray[4] = { 1.0f, 1.0f, 0.0f, 0.0f, };
+                        XPLMSetDatavf(commands->bt.tbm9.rbrak_array, &barray[0], 0, 2);
+                        XPLMSetDataf(commands->pb.tbm9.pbrak_ratio, 1.0f);
+//                      XPLMSetDatavf(commands->bt.tbm9.rbrak_array, &barray[2], 0, 2); // tested -- resetting to zero immediately doesn't work
+                        return 0;
+                    }
+                    XPLMSetDataf(commands->pb.tbm9.pbrak_ratio, 1.0f);
+                    return 0;
+                }
+                if (commands->xnz_bt == XNZ_BT_TBM9)
+                {
+                    /*
+                     * just in case we unset parking brake right after setting it,
+                     * w/out calling e.g. brake hold regular or similar in between
+                     */
+                    float barray[4] = { 1.0f, 1.0f, 0.0f, 0.0f, };
+                    XPLMSetDatavf(commands->bt.tbm9.rbrak_array, &barray[2], 0, 2);
+                    XPLMSetDataf(commands->pb.tbm9.pbrak_ratio, 0.0f);
+                    return 0;
+                }
+                XPLMSetDataf(commands->pb.tbm9.pbrak_ratio, 0.0f);
+                return 0;
+
+            case XNZ_PB_XPLM:
+                if (set)
+                {
+                    XPLMSetDataf(commands->xp.pbrak_ratio, 1.0f);
+                    commands->xp.pbrak_onoff = 1;
+                    return 0;
+                }
+                XPLMSetDataf(commands->xp.pbrak_ratio, 0.0f);
+                commands->xp.pbrak_onoff = 0;
+                return 0;
+
+            case XNZ_PB_ERRR:
+            default:
+                return -1;
+        }
+        return -1;
+    }
+    return -1;
+}
+
+static int chandler_rgb_pkb(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if ((((xnz_cmd_context*)inRefcon)->xp.pbrakonoff2 = parking_brake_get(inRefcon))) // if set, release parking brake
+        {
+            chandler_pkb_off(((xnz_cmd_context*)inRefcon)->cmd_pkb_off, xplm_CommandEnd, inRefcon); // use command handler for callouts
+        }
+        return chandler_rgb_hld(((xnz_cmd_context*)inRefcon)->cmd_rgb_hld, xplm_CommandBegin, inRefcon);
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (0 == chandler_rgb_hld(((xnz_cmd_context*)inRefcon)->cmd_rgb_hld, xplm_CommandEnd, inRefcon))
+        {
+            if (((xnz_cmd_context*)inRefcon)->xp.pbrakonoff2 == 0) // if was NOT set on command begin, set parking brake
+            {
+                if (GROUNDSP_KTS_MIN > MPS2KTS(XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.groundspeed))) // only when groundspeed is very low
+                {
+                    return chandler_pkb_onn(((xnz_cmd_context*)inRefcon)->cmd_pkb_onn, xplm_CommandEnd, inRefcon); // use command handler for callouts
+                }
+                return 0;
+            }
+            return 0;
+        }
+        return 0;
+    }
+    return 0;
+}
+static int chandler_rgb_hld(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    float barray[2];
+    switch (inPhase)
+    {
+        case xplm_CommandBegin:
+        {
+            switch (((xnz_cmd_context*)inRefcon)->xnz_bt)
+            {
+                case XNZ_BT_XPLM:
+                case XNZ_BT_PKBR:
+                case XNZ_BT_SIMC:
+                    ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff = parking_brake_get(inRefcon);
+                    return 0; // TODO: autobrake -> manual braking
+
+                case XNZ_BT_COMM: // deferred initialization
+                    if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld == NULL)
+                    {
+                        ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld = XPLMFindCommand(((xnz_cmd_context*)inRefcon)->bt.comm.commnd_max_hld);
+                        ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld = XPLMFindCommand(((xnz_cmd_context*)inRefcon)->bt.comm.commnd_rgb_hld);
+                        ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff = parking_brake_get(inRefcon);
+                        ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                        return 0;
+                    }
+                    if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld ||
+                        ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_rgb_hld)
+                    {
+                        ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff = parking_brake_get(inRefcon);
+                        XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current);
+                        ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                        return 0;
+                    }
+                    ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff = parking_brake_get(inRefcon);
+                    ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                    return 0; // TODO: autobrake -> manual braking
+
+                case XNZ_BT_FF35:
+                    ((xnz_cmd_context*)inRefcon)->bt.ff35.pbrak_onoff = parking_brake_get(inRefcon);
+                    return 0;
+
+                case XNZ_BT_TO32:
+                case XNZ_BT_TBM9:
+                case XNZ_BT_ERRR:
+                default:
+                    return 0;
+            }
+            return 0;
+        }
+
+        case xplm_CommandContinue:
+        {
+            float groundspeed = XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.groundspeed);
+            int speed = (50.0 < MPS2KTS(groundspeed)) ? 2 : (15.0f < MPS2KTS(groundspeed)) ? 1: 0;
+            switch (((xnz_cmd_context*)inRefcon)->xnz_bt)
+            {
+                case XNZ_BT_XPLM:
+                    switch (speed)
+                    {
+                        case 2:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.l_rgb_ratio, 0.9f);
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.r_rgb_ratio, 0.9f);
+                            return 0;
+                        case 1:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.l_rgb_ratio, 0.6f);
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.r_rgb_ratio, 0.6f);
+                            return 0;
+                        default:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.l_rgb_ratio, 0.3f);
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.r_rgb_ratio, 0.3f);
+                            return 0;
+                    }
+
+                case XNZ_BT_COMM:
+                    switch (speed)
+                    {
+                        case 2:
+                            if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld)
+                            {
+                                if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == NULL)
+                                {
+                                    XPLMCommandBegin((((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld));
+                                    return 0;
+                                }
+                                if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld)
+                                {
+                                    return 0;
+                                }
+                                if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_rgb_hld)
+                                {
+                                    XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current);
+                                    XPLMCommandBegin((((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld));
+                                    return 0;
+                                }
+                                ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                                return 0;
+                            }
+                            else
+                            {
+                                ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                                return 0;
+                            }
+                        default:
+                            if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_rgb_hld)
+                            {
+                                if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == NULL)
+                                {
+                                    XPLMCommandBegin((((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_rgb_hld));
+                                    return 0;
+                                }
+                                if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_rgb_hld)
+                                {
+                                    return 0;
+                                }
+                                if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current == ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_mxb_hld)
+                                {
+                                    XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current);
+                                    XPLMCommandBegin((((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_rgb_hld));
+                                    return 0;
+                                }
+                                ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                                return 0;
+                            }
+                            else
+                            {
+                                ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                                return 0;
+                            }
+                    }
+
+                case XNZ_BT_PKBR:
+                    if (((xnz_cmd_context*)inRefcon)->xnz_pb == XNZ_PB_XPLM && parking_brake_get(inRefcon) == 1)
+                    {
+                        return 0;
+                    }
+                    switch (speed)
+                    {
+                        case 2:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, 0.9f);
+                            return 0;
+                        case 1:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, 0.6f);
+                            return 0;
+                        default:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, 0.3f);
+                            return 0;
+                    }
+
+                case XNZ_BT_SIMC:
+                    if (((xnz_cmd_context*)inRefcon)->xnz_pb == XNZ_PB_XPLM && parking_brake_get(inRefcon) == 1)
+                    {
+                        return 0;
+                    }
+                    switch (speed)
+                    {
+                        case 2:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, 1.0f);
+                            return 0;
+                        case 1:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, .75f);
+                            return 0;
+                        default:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, 0.5f);
+                            return 0;
+                    }
+
+                case XNZ_BT_TO32:
+                    switch (speed)
+                    {
+                        case 2:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.l_rgb_ratio, 0.9f);
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.r_rgb_ratio, 0.9f);
+                            return 0;
+                        case 1:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.l_rgb_ratio, 0.6f);
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.r_rgb_ratio, 0.6f);
+                            return 0;
+                        default:
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.l_rgb_ratio, 0.3f);
+                            XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.r_rgb_ratio, 0.3f);
+                            return 0;
+                    }
+
+                /*
+                 * sim/flight_controls/brakes_regular seems to use 1-sim/parckBrake too…
+                 */
+                case XNZ_BT_FF35:
+                    if (0 == parking_brake_get(inRefcon))
+                    {
+                        return parking_brake_set(inRefcon, 1);
+                    }
+                    return 0;
+
+                case XNZ_BT_TBM9:
+                    switch (speed)
+                    {
+                        case 2:
+                            barray[0] = barray[1] = 0.9f;
+                            break;
+                        case 1:
+                            barray[0] = barray[1] = 0.6f;
+                            break;
+                        default:
+                            barray[0] = barray[1] = 0.3f;
+                            break;
+                    }
+                    XPLMSetDatavf(((xnz_cmd_context*)inRefcon)->bt.tbm9.rbrak_array, barray, 0, 2);
+                    return 0;
+
+                case XNZ_BT_ERRR:
+                default:
+                    return 0;
+            }
+            return 0;
+        }
+
+        case xplm_CommandEnd:
+        default:
+        {
+            switch (((xnz_cmd_context*)inRefcon)->xnz_bt)
+            {
+                case XNZ_BT_XPLM:
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.l_rgb_ratio, 0.0f);
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.r_rgb_ratio, 0.0f);
+                    return parking_brake_set(inRefcon, ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff);
+                    return 0;
+
+                case XNZ_BT_COMM:
+                    if (((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current != NULL)
+                    {
+                        XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current);
+                        ((xnz_cmd_context*)inRefcon)->bt.comm.cmd_current = NULL;
+                        return 0;
+                    }
+                    return 0;
+
+                case XNZ_BT_PKBR:
+                case XNZ_BT_SIMC:
+                    if (((xnz_cmd_context*)inRefcon)->xnz_pb == XNZ_PB_XPLM)
+                    {
+                        return parking_brake_set(inRefcon, ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff);
+                    }
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.pbrak_ratio, 0.0f);
+                    return parking_brake_set(inRefcon, ((xnz_cmd_context*)inRefcon)->xp.pbrak_onoff);
+
+                case XNZ_BT_TO32:
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.l_rgb_ratio, 0.0f);
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->bt.to32.r_rgb_ratio, 0.0f);
+                    return 0;
+
+                case XNZ_BT_FF35:
+                    return parking_brake_set(inRefcon, ((xnz_cmd_context*)inRefcon)->bt.ff35.pbrak_onoff);
+
+                case XNZ_BT_TBM9:
+                    barray[0] = barray[1] = 0.0f; XPLMSetDatavf(((xnz_cmd_context*)inRefcon)->bt.tbm9.rbrak_array, barray, 0, 2);
+                    return 0;
+
+                case XNZ_BT_ERRR:
+                default:
+                    return 0;
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+
+static int chandler_pkb_tog(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (parking_brake_get(inRefcon))
+        {
+            return chandler_pkb_off(((xnz_cmd_context*)inRefcon)->cmd_pkb_off, xplm_CommandEnd, inRefcon); // use command handler for callouts
+        }
+        return chandler_pkb_onn(((xnz_cmd_context*)inRefcon)->cmd_pkb_onn, xplm_CommandEnd, inRefcon); // use command handler for callouts
+    }
+    return 0;
+}
+
+static int chandler_pkb_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+#if 0
+    if (inPhase == xplm_CommandEnd)
+    {
+        /*
+         * this may not work under X-Plane 11, they didn't
+         * apply the same tweak as for engine run switches
+         */
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return parking_brake_set(inRefcon, 1);
+        }
+    }
+#endif
+    if (inPhase == xplm_CommandEnd)
+    {
+        return chandler_pkb_off(((xnz_cmd_context*)inRefcon)->cmd_pkb_off, xplm_CommandEnd, inRefcon); // use command handler for callouts
+    }
+    if (inPhase == xplm_CommandBegin)
+    {
+        return chandler_pkb_onn(((xnz_cmd_context*)inRefcon)->cmd_pkb_onn, xplm_CommandEnd, inRefcon); // use command handler for callouts
+    }
+    if (inPhase == xplm_CommandContinue)
+    {
+        if (0 == parking_brake_get(inRefcon))
+        {
+            return parking_brake_set(inRefcon, 1);
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_pkb_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        XPLMSpeakString("park brake set");
+        return parking_brake_set(inRefcon, 1);
+    }
+    return 0;
+}
+
+static int chandler_pkb_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        XPLMSpeakString("park brake released");
+        return parking_brake_set(inRefcon, 0);
+    }
+    return 0;
+}
+
+static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_XPLM:
+            case XNZ_AT_TOLI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_on);
+                return 0;
+
+            case XNZ_AT_COMM:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.comm.cmd_at_toga);
+                return 0;
+
+            case XNZ_AT_TOGA:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga);
+                return 0;
+
+            case XNZ_AT_NONE:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
+                return 0;
+
+            case XNZ_AT_ERRR:
+            case XNZ_AT_TOGG:
+//          case XNZ_AT_DISC:
+            default:
+                return 0;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_a_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_XPLM:
+            case XNZ_AT_TOLI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_no);
+                return 0;
+
+            case XNZ_AT_COMM:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.comm.cmd_at_disc);
+                return 0;
+
+//          case XNZ_AT_DISC:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_no);
+//              return 0;
+
+            case XNZ_AT_TOGA:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga);
+                return 0;
+
+            case XNZ_AT_NONE:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
+                return 0;
+
+            case XNZ_AT_ERRR:
+            case XNZ_AT_TOGG:
+            default:
+                return 0;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_a_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_TOGA:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga); // only map to the leftmost button (engines 1 & 2)
+                return 0;
+
+            case XNZ_AT_NONE:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga); // only map to the leftmost button (engines 1 & 2)
+                return 0;
+
+            default:
+                break;
+        }
+        return chandler_a_12_lt(((xnz_cmd_context*)inRefcon)->cmd_a_12_lt, xplm_CommandEnd, inRefcon);
+    }
+    return 0;
+}
+
+static int chandler_a_34_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_TOGA:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga); // only map to the leftmost button (engines 1 & 2)
+                return 0;
+
+            case XNZ_AT_NONE:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga); // only map to the leftmost button (engines 1 & 2)
+                return 0;
+
+            default:
+                break;
+        }
+        return chandler_a_12_lt(((xnz_cmd_context*)inRefcon)->cmd_a_12_lt, xplm_CommandEnd, inRefcon);
+    }
+    return 0;
+}
+
+static int chandler_a_34_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_TOGA:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga); // only map to the leftmost button (engines 1 & 2)
+                return 0;
+
+            case XNZ_AT_NONE:
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga); // only map to the leftmost button (engines 1 & 2)
+                return 0;
+
+            default:
+                break;
+        }
+        return chandler_a_12_lt(((xnz_cmd_context*)inRefcon)->cmd_a_12_lt, xplm_CommandEnd, inRefcon);
+    }
+    return 0;
+}
+
+static int chandler_x_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_lt);
+                return 0;
+
+            case XNZ_ET_DA62:
+            case XNZ_ET_XPPI:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.p_start1);
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_1_knb) > 0)
+                {
+                    XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_1_rgt);
+                    return 0;
+                }
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_lt);
+                return 0;
+
+            case XNZ_ET_DA62:
+            case XNZ_ET_XPPI:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.p_start1);
+                return 0;
+
+            case XNZ_ET_EVIC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_x_12_lt);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_knb) > 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_e_1_rgt);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_1_knb) > 0)
+                {
+                    XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_1_rgt);
+                    return 0;
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.ongroundany))
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_knb, -1.0f);
+                    return 0;
+                }
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_knb, 2.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.ongroundany))
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 0.0f);
+                    return 0;
+                }
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 4.0f);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_x_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_rt);
+                return 0;
+
+            case XNZ_ET_DA62:
+            case XNZ_ET_XPPI:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.p_start2);
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_2_knb) > 0)
+                {
+                    XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_2_rgt);
+                    return 0;
+                }
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_rt);
+                return 0;
+
+            case XNZ_ET_DA62:
+            case XNZ_ET_XPPI:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.p_start2);
+                return 0;
+
+            case XNZ_ET_EVIC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_x_12_rt);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_knb) > 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_e_2_rgt);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_2_knb) > 0)
+                {
+                    XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_2_rgt);
+                    return 0;
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.ongroundany))
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_knb, -1.0f);
+                    return 0;
+                }
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_knb, 2.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.ongroundany))
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 0.0f);
+                    return 0;
+                }
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 4.0f);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_x_34_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_lt);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.p_start3);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_lt);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.p_start3);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_x_34_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_rt);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.p_start4);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TBM9:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_x_12_rt);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.p_start4);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_12_ch(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_12_cr);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_m_12_cr(((xnz_cmd_context*)inRefcon)->cmd_m_12_cr, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_12_no);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_12_cr(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_m_12_cr);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_m_12_cr);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_m_12_cr);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_lft1);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_lft2);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_ign) > 0.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_ign) > 1.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_1_dn);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_1_dn);
+                }
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_ign) > 0.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_ign) > 1.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_2_dn);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_2_dn);
+                }
+                return 0;
+
+            case XNZ_ET_DA62:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec1) > 0.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec1) > 1.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu1_dn);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu1_dn);
+                }
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec2) > 0.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec2) > 1.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu2_dn);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu2_dn);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+            {
+                int auto_ignite_off[2] = { 0, 0, };
+                XPLMSetDatavi(((xnz_cmd_context*)inRefcon)->xp.auto_ignite, auto_ignite_off, 0, 2);
+                return 0;
+            }
+
+            case XNZ_ET_FF75:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 2.0f);
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 2.0f);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_12_no(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_m_12_no);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_m_12_no);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_m_12_no);
+                return 0;
+
+            case XNZ_ET_EVIC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_m_12_no);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_ign) < 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_1_up);
+                }
+                else if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_ign) > 1.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_1_dn);
+                }
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_ign) < 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_2_up);
+                }
+                else if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_ign) > 1.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_2_dn);
+                }
+                return 0;
+
+            case XNZ_ET_XPPI:
+            {
+                int eng_running[2]; XPLMGetDatavi(((xnz_cmd_context*)inRefcon)->xp.eng_running, eng_running, 0, 2);
+                if (eng_running[0])
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth1);
+                }
+                else
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop1);
+                }
+                if (eng_running[1])
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth2);
+                }
+                else
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop2);
+                }
+                return 0;
+            }
+
+            case XNZ_ET_EA50:
+            {
+                int eng_running[2]; XPLMGetDatavi(((xnz_cmd_context*)inRefcon)->xp.eng_running, eng_running, 0, 2);
+                if (eng_running[0])
+                {
+                    XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en1, 1);
+                }
+                else
+                {
+                    XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en1, 0);
+                }
+                if (eng_running[1])
+                {
+                    XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en2, 1);
+                }
+                else
+                {
+                    XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en2, 0);
+                }
+                return 0;
+            }
+
+            case XNZ_ET_DA62:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec1) < 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu1_up);
+                }
+                else if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec1) > 1.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu1_dn);
+                }
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec2) < 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu2_up);
+                }
+                else if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec2) > 1.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu2_dn);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+            {
+                int auto_ignite_on[2] = { 1, 1, };
+                XPLMSetDatavi(((xnz_cmd_context*)inRefcon)->xp.auto_ignite, auto_ignite_on, 0, 2);
+                return 0;
+            }
+
+            case XNZ_ET_IX73:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_knb, 0.0f);
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_knb, 0.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+            {
+                int eng_running[2]; XPLMGetDatavi(((xnz_cmd_context*)inRefcon)->xp.eng_running, eng_running, 0, 2);
+                if (eng_running[0])
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 1.0f);
+                }
+                else
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 2.0f);
+                }
+                if (eng_running[1])
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 1.0f);
+                }
+                else
+                {
+                    XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 2.0f);
+                }
+                return 0;
+            }
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_12_st(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_m_12_st);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_m_12_st);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_m_12_st);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_rgt1);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_rgt2);
+                return 0;
+
+            case XNZ_ET_EVIC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_m_12_st);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_ign) < 1.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_ign) < 0.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_1_up);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_1_up);
+                }
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_ign) < 1.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_ign) < 0.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_2_up);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_ig_2_up);
+                }
+                return 0;
+
+            case XNZ_ET_EA50:
+            {
+                int eng_running[2]; XPLMGetDatavi(((xnz_cmd_context*)inRefcon)->xp.eng_running, eng_running, 0, 2);
+                if (eng_running[0])
+                {
+                    XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en1, 2);
+                }
+                if (eng_running[1])
+                {
+                    XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en2, 2);
+                }
+                return 0;
+            }
+
+            case XNZ_ET_DA62:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec1) < 1.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec1) < 0.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu1_up);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu1_up);
+                }
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec2) < 1.5f)
+                {
+                    if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.da62.drf_mod_ec2) < 0.5f)
+                    {
+                        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu2_up);
+                    }
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_ecu2_up);
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_knb, 1.0f);
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_knb, 1.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 3.0f);
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 3.0f);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_12_sh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_12_st);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_m_12_st(((xnz_cmd_context*)inRefcon)->cmd_m_12_st, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_12_no);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_34_ch(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_34_cr);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_m_34_cr(((xnz_cmd_context*)inRefcon)->cmd_m_34_cr, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_34_no);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_34_cr(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+            case XNZ_ET_FF35:
+            case XNZ_ET_TBM9:
+                return chandler_m_12_cr(((xnz_cmd_context*)inRefcon)->cmd_m_12_cr, xplm_CommandEnd, inRefcon);
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_lft3);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_lft4);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_34_no(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+            case XNZ_ET_FF35:
+            case XNZ_ET_TBM9:
+                return chandler_m_12_no(((xnz_cmd_context*)inRefcon)->cmd_m_12_no, xplm_CommandEnd, inRefcon);
+
+            case XNZ_ET_XPPI:
+            {
+                int eng_running[2]; XPLMGetDatavi(((xnz_cmd_context*)inRefcon)->xp.eng_running, eng_running, 2, 2);
+                if (eng_running[0])
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth3);
+                }
+                else
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop3);
+                }
+                if (eng_running[1])
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth4);
+                }
+                else
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop4);
+                }
+                return 0;
+            }
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_34_st(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+            case XNZ_ET_FF35:
+            case XNZ_ET_TBM9:
+                return chandler_m_12_st(((xnz_cmd_context*)inRefcon)->cmd_m_12_st, xplm_CommandEnd, inRefcon);
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_rgt3);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_m_rgt4);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_m_34_sh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_34_st);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_m_34_st(((xnz_cmd_context*)inRefcon)->cmd_m_34_st, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_m_34_no);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_1_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_1_onn);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_e_1_onn(((xnz_cmd_context*)inRefcon)->cmd_e_1_onn, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_1_off);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_1_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_e_1_onn);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_e_1_onn);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_onn);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth1);
+                return 0;
+
+            case XNZ_ET_EA50:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en1, 1);
+                return 0;
+
+            case XNZ_ET_DA62:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_e_1_onn);
+                return 0;
+
+            case XNZ_ET_EVIC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_e_1_onn);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_knb) < 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_e_1_rgt);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_1_knb) < 1)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_1_rgt);
+                    return 0;
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 1.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 2);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_1_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_e_1_off);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_e_1_off);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_off);
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop1);
+                return 0;
+
+            case XNZ_ET_EA50:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en1, 0);
+                return 0;
+
+            case XNZ_ET_DA62:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_e_1_off);
+                return 0;
+
+            case XNZ_ET_EVIC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_e_1_off);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_1_knb) > 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_e_1_lft);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_1_knb) > 0)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_1_lft);
+                    return 0;
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 0.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 0);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_2_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_2_onn);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_e_2_onn(((xnz_cmd_context*)inRefcon)->cmd_e_2_onn, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_2_off);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_2_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_e_2_onn);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_e_2_onn);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.tbm9.drf_fuelsel, 0); // FUEL SEL switch position. 0 = AUTO, 1 = MAN.
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth2);
+                return 0;
+
+            case XNZ_ET_EA50:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en2, 1);
+                return 0;
+
+            case XNZ_ET_DA62:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_e_2_onn);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_knb) < 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_e_2_rgt);
+                }
+                return 0;
+
+            case XNZ_ET_EVIC:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.evic.drf_fuel_at) == 0)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_e_2_tog);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_2_knb) < 1)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_2_rgt);
+                    return 0;
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 1.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 2);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_2_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_TO32:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.to32.cmd_e_2_off);
+                return 0;
+
+            case XNZ_ET_FF35:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.ff35.cmd_e_2_off);
+                return 0;
+
+            case XNZ_ET_TBM9:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.tbm9.drf_fuelsel, 1); // FUEL SEL switch position. 0 = AUTO, 1 = MAN.
+                return 0;
+
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop2);
+                return 0;
+
+            case XNZ_ET_EA50:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ea50.drf_mod_en2, 0);
+                return 0;
+
+            case XNZ_ET_DA62:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.da62.cmd_e_2_off);
+                return 0;
+
+            case XNZ_ET_E55P:
+                if (XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.e55p.drf_e_2_knb) > 0.5f)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e55p.cmd_e_2_lft);
+                }
+                return 0;
+
+            case XNZ_ET_EVIC:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.evic.drf_fuel_at) != 0)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.evic.cmd_e_2_tog);
+                }
+                return 0;
+
+            case XNZ_ET_E35L:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->et.e35l.drf_e_2_knb) > 0)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_2_lft);
+                    return 0;
+                }
+                return 0;
+
+            case XNZ_ET_IX73:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 0.0f);
+                return 0;
+
+            case XNZ_ET_FF75:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 0);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_3_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_3_onn);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_e_3_onn(((xnz_cmd_context*)inRefcon)->cmd_e_3_onn, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_3_off);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_3_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth3);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_3_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop3);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_4_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandBegin)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return 0;
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_4_onn);
+        return 0;
+    }
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (((xnz_cmd_context*)inRefcon)->xp_11_50_or_later)
+        {
+            return chandler_e_4_onn(((xnz_cmd_context*)inRefcon)->cmd_e_4_onn, xplm_CommandEnd, inRefcon);
+        }
+        XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->cmd_e_4_off);
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_4_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mboth4);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_e_4_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_XPPI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.p_mstop4);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
 #undef AIRSPEED_MIN_KTS
 #undef AIRSPEED_MAX_KTS
 #undef GROUNDSP_MIN_KTS
@@ -1527,5 +4917,8 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
 #undef XNZ_LOG_PREFIX
 #undef XNZ_XPLM_TITLE
 #undef ACF_ROLL_SET
+#undef HS_TBM9_IDLE
+#undef MPS2KPH
 #undef MPS2KTS
+#undef T_SMALL
 #undef T_ZERO
