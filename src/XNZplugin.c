@@ -689,9 +689,9 @@ static void default_throt_share(thrust_zones *info)
 {
     if (info)
     {
-        info->share[ZONE_CLB] = 0.5f;
-        info->share[ZONE_FLX] = 0.8125f - info->share[ZONE_CLB];
-        info->share[ZONE_TGA] = 1.0f - info->share[ZONE_FLX] - info->share[ZONE_CLB];
+        info->share[ZONE_CLB] = 0.4375f;
+        info->share[ZONE_FLX] = 0.8750f - info->share[ZONE_CLB];
+        info->share[ZONE_TGA] = 1.0000f - info->share[ZONE_FLX] - info->share[ZONE_CLB];
     }
 }
 
@@ -2121,6 +2121,12 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             global_context->zones_info.share[ZONE_CLB] = 0.44975f; // 45% - 0.1% / 2 / 2 safety margin
                             global_context->zones_info.share[ZONE_FLX] = 0.74975f - global_context->zones_info.share[ZONE_CLB]; // 75% - 0.1% / 2 / 2 safety margin
                             global_context->zones_info.share[ZONE_TGA] = 0.94975f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~95%
+                            break;
+
+                        case XNZ_ET_E35L:
+                            global_context->zones_info.share[ZONE_CLB] = 0.50f;
+                            global_context->zones_info.share[ZONE_FLX] = 0.75f - global_context->zones_info.share[ZONE_CLB];
+                            global_context->zones_info.share[ZONE_TGA] = 1.00f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB];
                             break;
 
                         case XNZ_ET_EA50:
