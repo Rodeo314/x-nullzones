@@ -670,18 +670,18 @@ static void update_thrust_zones(thrust_zones *info)
         /*
          * Re-compute zones based on the center of each hardware detent.
          */
-        info->max[ZONE_TGA] = (                      1.0f - TCA_DEADBAND); // default: 0.965f
-        info->min[ZONE_TGA] = (              TCA_FLEX_CTR + TCA_DEADBAND); // default: 0.750f
-        info->max[ZONE_FLX] = (              TCA_FLEX_CTR - TCA_DEADBAND); // default: 0.680f
-        info->min[ZONE_FLX] = (              TCA_CLMB_CTR + TCA_DEADBAND); // default: 0.550f
-        info->max[ZONE_CLB] = (              TCA_CLMB_CTR - TCA_DEADBAND); // default: 0.480f
-        info->min[ZONE_CLB] = (              TCA_IDLE_CTR + TCA_DEADBAND); // default: 0.330f
-        info->max[ZONE_REV] = (              TCA_IDLE_CTR - TCA_DEADBAND); // default: 0.260f
-        info->min[ZONE_REV] = (                      0.0f + TCA_DEADBAND); // default: 0.035f
-        info->len[ZONE_TGA] = (info->max[ZONE_TGA] - info->min[ZONE_TGA]); // default: 0.215f
-        info->len[ZONE_FLX] = (info->max[ZONE_FLX] - info->min[ZONE_FLX]); // default: 0.130f
-        info->len[ZONE_CLB] = (info->max[ZONE_CLB] - info->min[ZONE_CLB]); // default: 0.150f
-        info->len[ZONE_REV] = (info->max[ZONE_REV] - info->min[ZONE_REV]); // default: 0.225f
+        info->max[ZONE_TGA] = (                      1.0f - TCA_DEADBAND); // default: 0.9625f
+        info->min[ZONE_TGA] = (              TCA_FLEX_CTR + TCA_DEADBAND); // default: 0.7525f
+        info->max[ZONE_FLX] = (              TCA_FLEX_CTR - TCA_DEADBAND); // default: 0.6775f
+        info->min[ZONE_FLX] = (              TCA_CLMB_CTR + TCA_DEADBAND); // default: 0.5525f
+        info->max[ZONE_CLB] = (              TCA_CLMB_CTR - TCA_DEADBAND); // default: 0.4775f
+        info->min[ZONE_CLB] = (              TCA_IDLE_CTR + TCA_DEADBAND); // default: 0.3325f
+        info->max[ZONE_REV] = (              TCA_IDLE_CTR - TCA_DEADBAND); // default: 0.2575f
+        info->min[ZONE_REV] = (                      0.0f + TCA_DEADBAND); // default: 0.0375f
+        info->len[ZONE_TGA] = (info->max[ZONE_TGA] - info->min[ZONE_TGA]); // default: 0.2100f
+        info->len[ZONE_FLX] = (info->max[ZONE_FLX] - info->min[ZONE_FLX]); // default: 0.1250f
+        info->len[ZONE_CLB] = (info->max[ZONE_CLB] - info->min[ZONE_CLB]); // default: 0.1450f
+        info->len[ZONE_REV] = (info->max[ZONE_REV] - info->min[ZONE_REV]); // default: 0.2200f
     }
 }
 
