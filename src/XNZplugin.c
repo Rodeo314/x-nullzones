@@ -388,6 +388,7 @@ typedef struct
     {
         XPLMCommandRef at_at_on; // sim/autopilot/autothrottle_on
         XPLMCommandRef at_at_no; // sim/autopilot/autothrottle_off
+        XPLMCommandRef at_at_n1; // sim/autopilot/autothrottle_n1epr
         XPLMCommandRef ap_to_ga; // sim/autopilot/take_off_go_around
         XPLMCommandRef p_start1; // sim/starters/engage_starter_1
         XPLMCommandRef p_mboth1; // sim/magnetos/magnetos_both_1
@@ -898,6 +899,10 @@ PLUGIN_API int XPluginEnable(void)
     if (NULL == (global_context->commands.xp.at_at_no = XPLMFindCommand("sim/autopilot/autothrottle_off")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/autothrottle_off)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.at_at_n1 = XPLMFindCommand("sim/autopilot/autothrottle_n1epr")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[info]: sim/autopilot/autothrottle_n1epr unavailable\n"); // new command (optional)
     }
     if (NULL == (global_context->commands.xp.ap_to_ga = XPLMFindCommand("sim/autopilot/take_off_go_around")))
     {
@@ -3592,6 +3597,16 @@ static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
         switch (((xnz_cmd_context*)inRefcon)->xnz_at)
         {
             case XNZ_AT_XPLM:
+                if (((xnz_cmd_context*)inRefcon)->xp.at_at_n1)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_n1);
+                    return 0;
+                }
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_on);
+                return 0;
+
             case XNZ_AT_TOLI:
                 XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_on);
                 return 0;
