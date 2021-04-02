@@ -108,6 +108,7 @@ typedef struct
         XNZ_AP_COMM =   2,
         XNZ_AP_TOGG =   3,
         XNZ_AP_FF32 = 320,
+        XNZ_AP_ABS7 = 700,
     } xnz_ap;
 
     union
@@ -126,9 +127,9 @@ typedef struct
 
         struct
         {
-            XPLMCommandRef cmd_ap_togg;
-            XPLMDataRef    ref_ap_stts;
-        } togg;
+            XPLMCommandRef cmd_vviu[2];
+            XPLMCommandRef cmd_vvid[2];
+        } abs7;
     } ap;
 
     enum
@@ -349,6 +350,12 @@ typedef struct
 
     enum
     {
+        XNZ_FL_ERRR =  -1,
+        XNZ_FL_XPLM =   1,
+    } xnz_fl;
+
+    enum
+    {
         XNZ_PB_ERRR =  -1,
         XNZ_PB_XPLM =   1,
         XNZ_PB_COMM =   2,
@@ -384,6 +391,14 @@ typedef struct
         } tbm9;
     } pb;
 
+    enum
+    {
+        XNZ_SB_ERRR =  -1,
+        XNZ_SB_XPLM =   1,
+        XNZ_SB_AUTO =   2,
+        XNZ_SB_E55P = 535,
+    } xnz_sb;
+
     struct
     {
         XPLMCommandRef at_at_on; // sim/autopilot/autothrottle_on
@@ -412,6 +427,7 @@ typedef struct
         XPLMCommandRef p_m_rgt4; // sim/magnetos/magnetos_right_4
         XPLMCommandRef p_mstop4; // sim/magnetos/magnetos_off_4
         XPLMDataRef auto_pil_on; // sim/cockpit2/autopilot/servos_on
+        XPLMDataRef auto_vvi_on; // sim/cockpit2/autopilot/vvi_status
         XPLMDataRef auto_thr_on; // sim/cockpit2/autopilot/autothrottle_on
         XPLMDataRef eng_running; // sim/flightmodel/engine/ENGN_running
         XPLMDataRef igniters_on; // sim/cockpit2/engine/actuators/igniter_on
@@ -501,6 +517,8 @@ static int chandler_e_3_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 static int chandler_e_4_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_e_4_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_e_4_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_ab_vvid(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_ab_vviu(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 
 typedef struct
 {
@@ -997,6 +1015,10 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/autopilot/servos_on)\n"); goto fail;
     }
+    if (NULL == (global_context->commands.xp.auto_vvi_on = XPLMFindDataRef("sim/cockpit2/autopilot/vvi_status")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/autopilot/vvi_status)\n"); goto fail;
+    }
     if (NULL == (global_context->commands.xp.auto_thr_on = XPLMFindDataRef("sim/cockpit2/autopilot/autothrottle_on")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/autopilot/autothrottle_on)\n"); goto fail;
@@ -1396,6 +1418,11 @@ static void xnz_context_reset(xnz_context *ctx)
             XPHideWidget(ctx->widgetid[1]);
         }
 #endif
+        if (ctx->commands.xnz_ap == XNZ_AP_ABS7)
+        {
+            XPLMUnregisterCommandHandler(global_context->commands.ap.abs7.cmd_vvid[1], &chandler_ab_vvid, 1/* before Aerobask plugin*/, &global_context->commands);
+            XPLMUnregisterCommandHandler(global_context->commands.ap.abs7.cmd_vviu[1], &chandler_ab_vviu, 1/* before Aerobask plugin*/, &global_context->commands);
+        }
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
         if (ctx->idx_throttle_axis_1 >= 0)
         {
@@ -1979,7 +2006,11 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         NULL == (global_context->commands.et.e55p.cmd_e_1_lft = XPLMFindCommand("aerobask/engines/knob_1_lt"        )) ||
                         NULL == (global_context->commands.et.e55p.cmd_e_1_rgt = XPLMFindCommand("aerobask/engines/knob_1_rt"        )) ||
                         NULL == (global_context->commands.et.e55p.cmd_e_2_lft = XPLMFindCommand("aerobask/engines/knob_2_lt"        )) ||
-                        NULL == (global_context->commands.et.e55p.cmd_e_2_rgt = XPLMFindCommand("aerobask/engines/knob_2_rt"       )))
+                        NULL == (global_context->commands.et.e55p.cmd_e_2_rgt = XPLMFindCommand("aerobask/engines/knob_2_rt"        )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vvid[0] = XPLMFindCommand("sim/GPS/g1000n1_nose_down"         )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vvid[1] = XPLMFindCommand("aerobask/gfc700_vvi_dec"           )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vviu[0] = XPLMFindCommand("sim/GPS/g1000n1_nose_up"           )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vviu[1] = XPLMFindCommand("aerobask/gfc700_vvi_inc"          )))
                     {
                         xnz_log("[error]: could not self-configure for E55P\n");
                         global_context->commands.xnz_ab = XNZ_AB_ERRR;
@@ -1992,8 +2023,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                     else
                     {
+                        XPLMRegisterCommandHandler(global_context->commands.ap.abs7.cmd_vvid[1], &chandler_ab_vvid, 1/* before Aerobask plugin*/, &global_context->commands);
+                        XPLMRegisterCommandHandler(global_context->commands.ap.abs7.cmd_vviu[1], &chandler_ab_vviu, 1/* before Aerobask plugin*/, &global_context->commands);
                         global_context->commands.xnz_ab = XNZ_AB_NONE;
-                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_ap = XNZ_AP_ABS7; // Aerobask: G1000 + GFC 700
                         global_context->commands.xnz_at = XNZ_AT_NONE; // note: CSC controlled via A/P panel only
                         global_context->commands.xnz_bt = XNZ_BT_XPLM;
                         global_context->commands.xnz_et = XNZ_ET_E55P;
@@ -2004,6 +2037,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Victory G1000"))) && (XPLMIsPluginEnabled(test))))
                 {
                     if (NULL == (global_context->commands.et.evic.drf_fuel_at = XPLMFindDataRef("aerobask/lt_fuel_auto"           )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vvid[0] = XPLMFindCommand("sim/GPS/g1000n1_nose_down"       )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vvid[1] = XPLMFindCommand("aerobask/gfc700_vvi_dec"         )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vviu[0] = XPLMFindCommand("sim/GPS/g1000n1_nose_up"         )) ||
+                        NULL == (global_context->commands.ap.abs7.cmd_vviu[1] = XPLMFindCommand("aerobask/gfc700_vvi_inc"         )) ||
                         NULL == (global_context->commands.et.evic.cmd_e_1_onn = XPLMFindCommand("sim/fuel/fuel_pump_1_on"         )) ||
                         NULL == (global_context->commands.et.evic.cmd_e_1_off = XPLMFindCommand("sim/fuel/fuel_pump_1_off"        )) ||
                         NULL == (global_context->commands.et.evic.cmd_x_12_rt = XPLMFindCommand("sim/starters/shut_down_1"        )) ||
@@ -2023,8 +2060,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                     else
                     {
+                        XPLMRegisterCommandHandler(global_context->commands.ap.abs7.cmd_vvid[1], &chandler_ab_vvid, 1/* before Aerobask plugin*/, &global_context->commands);
+                        XPLMRegisterCommandHandler(global_context->commands.ap.abs7.cmd_vviu[1], &chandler_ab_vviu, 1/* before Aerobask plugin*/, &global_context->commands);
                         global_context->commands.xnz_ab = XNZ_AB_NONE;
-                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_ap = XNZ_AP_ABS7; // Aerobask: G1000 + GFC 700
                         global_context->commands.xnz_at = XNZ_AT_NONE; // note: CSC controlled via A/P panel only
                         global_context->commands.xnz_bt = XNZ_BT_XPLM;
                         global_context->commands.xnz_et = XNZ_ET_EVIC;
@@ -4942,6 +4981,38 @@ static int chandler_e_4_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
         return 0;
     }
     return 0;
+}
+
+static int chandler_ab_vvid(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inRefcon && XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_vvi_on) == 0)
+    {
+        if (inPhase == xplm_CommandEnd)
+        {
+            XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->ap.abs7.cmd_vvid[0]);
+//          xnz_log("DEBUG: chandler_ab_vvid -> sim/GPS/g1000n1_nose_down\n");
+            return 0;
+        }
+        return 0;
+    }
+//  xnz_log("DEBUG: chandler_ab_vvid -> aerobask/gfc700_vvi_dec\n");
+    return 1; // pass through
+}
+
+static int chandler_ab_vviu(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inRefcon && XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_vvi_on) == 0)
+    {
+        if (inPhase == xplm_CommandEnd)
+        {
+            XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->ap.abs7.cmd_vviu[0]);
+//          xnz_log("DEBUG: chandler_ab_vviu -> sim/GPS/g1000n1_nose_up\n");
+            return 0;
+        }
+        return 0;
+    }
+//  xnz_log("DEBUG: chandler_ab_vviu -> aerobask/gfc700_vvi_inc\n");
+    return 1; // pass through
 }
 
 #undef AIRSPEED_MIN_KTS
