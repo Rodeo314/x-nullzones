@@ -138,7 +138,7 @@ typedef struct
         XNZ_AT_XPLM =   1,
         XNZ_AT_COMM =   2,
         XNZ_AT_TOGG =   3,
-        XNZ_AT_TOGA =   4,
+        XNZ_AT_APTO =   4,
         XNZ_AT_FF32 = 320,
         XNZ_AT_TOLI = 321,
     } xnz_at;
@@ -390,6 +390,7 @@ typedef struct
         XPLMCommandRef at_at_no; // sim/autopilot/autothrottle_off
         XPLMCommandRef at_at_n1; // sim/autopilot/autothrottle_n1epr
         XPLMCommandRef ap_to_ga; // sim/autopilot/take_off_go_around
+        XPLMCommandRef ap_cw_st; // sim/autopilot/control_wheel_steer
         XPLMCommandRef p_start1; // sim/starters/engage_starter_1
         XPLMCommandRef p_mboth1; // sim/magnetos/magnetos_both_1
         XPLMCommandRef p_m_lft1; // sim/magnetos/magnetos_left_1
@@ -907,6 +908,10 @@ PLUGIN_API int XPluginEnable(void)
     if (NULL == (global_context->commands.xp.ap_to_ga = XPLMFindCommand("sim/autopilot/take_off_go_around")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/take_off_go_around)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ap_cw_st = XPLMFindCommand("sim/autopilot/control_wheel_steer")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/control_wheel_steer)\n"); goto fail;
     }
     if (NULL == (global_context->commands.xp.p_start1 = XPLMFindCommand("sim/starters/engage_starter_1")))
     {
@@ -1884,7 +1889,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         {
                             global_context->commands.xnz_ab = XNZ_AB_NONE;
                             global_context->commands.xnz_ap = XNZ_AP_XPLM;
-                            global_context->commands.xnz_at = XNZ_AT_TOGA;
+                            global_context->commands.xnz_at = XNZ_AT_APTO;
                             global_context->commands.xnz_bt = XNZ_BT_XPLM;
                             global_context->commands.xnz_et = XNZ_ET_E35L;
                             global_context->commands.xnz_pb = XNZ_PB_XPLM;
@@ -3598,6 +3603,20 @@ static int chandler_pkb_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
 static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
 {
+    if (inPhase == xplm_CommandBegin)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_APTO:
+            case XNZ_AT_NONE:
+                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.ap_cw_st);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
     if (inPhase == xplm_CommandEnd)
     {
         switch (((xnz_cmd_context*)inRefcon)->xnz_at)
@@ -3621,12 +3640,9 @@ static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.comm.cmd_at_toga);
                 return 0;
 
-            case XNZ_AT_TOGA:
-                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga);
-                return 0;
-
+            case XNZ_AT_APTO:
             case XNZ_AT_NONE:
-                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
+                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.ap_cw_st);
                 return 0;
 
             case XNZ_AT_ERRR:
@@ -3659,7 +3675,7 @@ static int chandler_a_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 //              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_no);
 //              return 0;
 
-            case XNZ_AT_TOGA:
+            case XNZ_AT_APTO:
                 XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga);
                 return 0;
 
@@ -3683,7 +3699,7 @@ static int chandler_a_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
     {
         switch (((xnz_cmd_context*)inRefcon)->xnz_at)
         {
-            case XNZ_AT_TOGA:
+            case XNZ_AT_APTO:
 //              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga); // only map to the leftmost button (engines 1 & 2)
                 return 0;
 
@@ -3705,7 +3721,7 @@ static int chandler_a_34_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
     {
         switch (((xnz_cmd_context*)inRefcon)->xnz_at)
         {
-            case XNZ_AT_TOGA:
+            case XNZ_AT_APTO:
 //              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga); // only map to the leftmost button (engines 1 & 2)
                 return 0;
 
@@ -3727,7 +3743,7 @@ static int chandler_a_34_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
     {
         switch (((xnz_cmd_context*)inRefcon)->xnz_at)
         {
-            case XNZ_AT_TOGA:
+            case XNZ_AT_APTO:
 //              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.toga.cmd_ap_toga); // only map to the leftmost button (engines 1 & 2)
                 return 0;
 
