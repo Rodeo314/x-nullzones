@@ -519,6 +519,7 @@ static int chandler_e_4_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 static int chandler_e_4_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_ab_vvid(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_ab_vviu(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_printax(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 
 typedef struct
 {
@@ -540,6 +541,7 @@ typedef struct
     int ice_detect_positive;
     XPLMDataRef f_ice_rf[4];
     XPWidgetID  widgetid[2];
+    XPLMCommandRef print_ax;
 #endif
 
     xnz_cmd_context commands;
@@ -675,12 +677,13 @@ PLUGIN_API void XPluginStop(void)
 
 #define HS_TBM9_IDLE (0.35f)
 
-// note: maximum L/R difference was measured slightly over 6%, but we allow for noisier hardware than mine
-static float TCA_SYNCBAND = .0750f;
-static float TCA_DEADBAND = .0375f;
-static float TCA_FLEX_CTR = 0.715f;
-static float TCA_CLMB_CTR = 0.515f;
-static float TCA_IDLE_CTR = 0.295f;
+static float TCA_SYNCBAND = 0.075000f; // note: maximum L/R difference was measured slightly over 6%, but we allow for noisier hardware than mine
+static float TCA_DEADBAND = 0.037500f; // half of the above
+static float TCA_FLEX_CTR = 0.706744f; // print_ax
+static float TCA_CLMB_CTR = 0.520279f; // print_ax
+//atic float TCA_IDLE_CTR = 0.323819f; // not held
+static float TCA_IDLE_CTR = 0.311589f; // averaged
+//atic float TCA_IDLE_CTR = 0.299359f; // yes held
 
 static void update_thrust_zones(thrust_zones *info)
 {
@@ -689,18 +692,18 @@ static void update_thrust_zones(thrust_zones *info)
         /*
          * Re-compute zones based on the center of each hardware detent.
          */
-        info->max[ZONE_TGA] = (                      1.0f - TCA_DEADBAND); // default: 0.9625f
-        info->min[ZONE_TGA] = (              TCA_FLEX_CTR + TCA_DEADBAND); // default: 0.7525f
-        info->max[ZONE_FLX] = (              TCA_FLEX_CTR - TCA_DEADBAND); // default: 0.6775f
-        info->min[ZONE_FLX] = (              TCA_CLMB_CTR + TCA_DEADBAND); // default: 0.5525f
-        info->max[ZONE_CLB] = (              TCA_CLMB_CTR - TCA_DEADBAND); // default: 0.4775f
-        info->min[ZONE_CLB] = (              TCA_IDLE_CTR + TCA_DEADBAND); // default: 0.3325f
-        info->max[ZONE_REV] = (              TCA_IDLE_CTR - TCA_DEADBAND); // default: 0.2575f
-        info->min[ZONE_REV] = (                      0.0f + TCA_DEADBAND); // default: 0.0375f
-        info->len[ZONE_TGA] = (info->max[ZONE_TGA] - info->min[ZONE_TGA]); // default: 0.2100f
-        info->len[ZONE_FLX] = (info->max[ZONE_FLX] - info->min[ZONE_FLX]); // default: 0.1250f
-        info->len[ZONE_CLB] = (info->max[ZONE_CLB] - info->min[ZONE_CLB]); // default: 0.1450f
-        info->len[ZONE_REV] = (info->max[ZONE_REV] - info->min[ZONE_REV]); // default: 0.2200f
+        info->max[ZONE_TGA] = (                      1.0f - TCA_DEADBAND);
+        info->min[ZONE_TGA] = (              TCA_FLEX_CTR + TCA_DEADBAND);
+        info->max[ZONE_FLX] = (              TCA_FLEX_CTR - TCA_DEADBAND);
+        info->min[ZONE_FLX] = (              TCA_CLMB_CTR + TCA_DEADBAND);
+        info->max[ZONE_CLB] = (              TCA_CLMB_CTR - TCA_DEADBAND);
+        info->min[ZONE_CLB] = (              TCA_IDLE_CTR + TCA_DEADBAND);
+        info->max[ZONE_REV] = (              TCA_IDLE_CTR - TCA_DEADBAND);
+        info->min[ZONE_REV] = (                      0.0f + TCA_DEADBAND);
+        info->len[ZONE_TGA] = (info->max[ZONE_TGA] - info->min[ZONE_TGA]);
+        info->len[ZONE_FLX] = (info->max[ZONE_FLX] - info->min[ZONE_FLX]);
+        info->len[ZONE_CLB] = (info->max[ZONE_CLB] - info->min[ZONE_CLB]);
+        info->len[ZONE_REV] = (info->max[ZONE_REV] - info->min[ZONE_REV]);
     }
 }
 
@@ -737,6 +740,14 @@ PLUGIN_API int XPluginEnable(void)
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (malloc)\n"); goto fail;
     }
 #ifndef PUBLIC_RELEASE_BUILD
+    if (NULL == (global_context->print_ax = XPLMCreateCommand("xnz/print/axes/average", "")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (print_ax)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->print_ax, &chandler_printax, 0, global_context);
+    }
     if (NULL == (global_context->nullzone[0] = XPLMFindDataRef("sim/joystick/joystick_pitch_nullzone")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (nullzone[0])\n"); goto fail;
@@ -1420,8 +1431,8 @@ static void xnz_context_reset(xnz_context *ctx)
 #endif
         if (ctx->commands.xnz_ap == XNZ_AP_ABS7)
         {
-            XPLMUnregisterCommandHandler(global_context->commands.ap.abs7.cmd_vvid[1], &chandler_ab_vvid, 1/* before Aerobask plugin*/, &global_context->commands);
-            XPLMUnregisterCommandHandler(global_context->commands.ap.abs7.cmd_vviu[1], &chandler_ab_vviu, 1/* before Aerobask plugin*/, &global_context->commands);
+            XPLMUnregisterCommandHandler(ctx->commands.ap.abs7.cmd_vvid[1], &chandler_ab_vvid, 1/* before Aerobask plugin*/, &ctx->commands);
+            XPLMUnregisterCommandHandler(ctx->commands.ap.abs7.cmd_vviu[1], &chandler_ab_vviu, 1/* before Aerobask plugin*/, &ctx->commands);
         }
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
         if (ctx->idx_throttle_axis_1 >= 0)
@@ -1460,6 +1471,10 @@ PLUGIN_API void XPluginDisable(void)
     if (global_context->widgetid[0] != 0)
     {
         XPDestroyWidget(global_context->widgetid[0], 1);
+    }
+    if (global_context->print_ax)
+    {
+        XPLMUnregisterCommandHandler(global_context->print_ax, &chandler_printax, 0, global_context);
     }
     if (global_context->commands.cmd_rgb_pkb) XPLMUnregisterCommandHandler(global_context->commands.cmd_rgb_pkb, &chandler_rgb_pkb, 0, &global_context->commands);
     if (global_context->commands.cmd_rgb_hld) XPLMUnregisterCommandHandler(global_context->commands.cmd_rgb_hld, &chandler_rgb_hld, 0, &global_context->commands);
@@ -5013,6 +5028,25 @@ static int chandler_ab_vviu(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
     }
 //  xnz_log("DEBUG: chandler_ab_vviu -> aerobask/gfc700_vvi_inc\n");
     return 1; // pass through
+}
+
+static int chandler_printax(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (inRefcon)
+        {
+            if (((xnz_context*)inRefcon)->idx_throttle_axis_1 >= 0)
+            {
+                float f[2]; XPLMGetDatavf(((xnz_context*)inRefcon)->f_stick_val, f, ((xnz_context*)inRefcon)->idx_throttle_axis_1, 2);
+                xnz_log("[debug]: throttle axes (raw): (%.6f -- %.6f) --> (%.6f)\n", f[0], f[1], ((f[0] + f[1]) / 2.0f));
+                return 0;
+            }
+            return 0;
+        }
+        return 0;
+    }
+    return 0;
 }
 
 #undef AIRSPEED_MIN_KTS
