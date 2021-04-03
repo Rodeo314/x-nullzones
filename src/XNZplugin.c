@@ -5000,7 +5000,7 @@ static int chandler_e_4_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
 static int chandler_ab_vvid(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
 {
-    if (inRefcon && XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_vvi_on) == 0)
+    if (inRefcon /*&& XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_vvi_on) == 0*/)
     {
         if (inPhase == xplm_CommandEnd)
         {
@@ -5016,7 +5016,7 @@ static int chandler_ab_vvid(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
 static int chandler_ab_vviu(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
 {
-    if (inRefcon && XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_vvi_on) == 0)
+    if (inRefcon /*&& XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_vvi_on) == 0*/)
     {
         if (inPhase == xplm_CommandEnd)
         {
