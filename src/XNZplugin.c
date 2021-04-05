@@ -787,8 +787,8 @@ PLUGIN_API int XPluginEnable(void)
     }
     XPSetWidgetProperty(global_context->widgetid[0], xpProperty_MainWindowType, xpMainWindowStyle_Translucent);
     XPSetWidgetProperty(global_context->widgetid[1], xpProperty_CaptionLit, 1);
-    XPSetWidgetGeometry(global_context->widgetid[0], 0, 56, 64, 0);
-    XPSetWidgetGeometry(global_context->widgetid[1], 7, 49, 57, 7);
+    XPSetWidgetGeometry(global_context->widgetid[0], 0, 56 - 0, 64 - 0, 0);
+    XPSetWidgetGeometry(global_context->widgetid[1], 7, 56 - 7, 64 - 7, 7);
 
     /* flight loop callback */
     XPLMRegisterFlightLoopCallback((global_context->f_l_cb = &callback_hdlr), 0, global_context);
@@ -2186,6 +2186,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 xnz_log("determined throttle type %d\n",   global_context->         xnz_tt);
                 xnz_log("determined a/thrust type %d\n",   global_context->commands.xnz_at);
                 xnz_log("determined park brake type %d\n", global_context->commands.xnz_pb);
+
+#ifndef PUBLIC_RELEASE_BUILD
+                /* re-position throttle change/ice detection overlay */
+                int outL, outT, outR, outB, outW, outH; XPLMGetScreenSize(&outW, &outH);
+                XPGetWidgetGeometry(global_context->widgetid[0], &outL, &outT, &outR, &outB);
+                int xOff = outW - outR, yOff = outH - outT; outL += xOff; outR += xOff; outT += yOff; outB += yOff;
+                XPSetWidgetGeometry(global_context->widgetid[0], outL + 0, outT - 0, outR - 0, outB + 0);
+                XPSetWidgetGeometry(global_context->widgetid[1], outL + 7, outT - 7, outR - 7, outB + 7);
+                xnz_log("[info]: overlay: W: %d | H: %d | X: %d -> %d | Y: %d -> %d\n", outW, outH, outL, outR, outB, outT);
+#endif
 
                 /* TCA thrust quadrant support */
                 if (global_context->idx_throttle_axis_1 < 0)
