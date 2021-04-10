@@ -108,6 +108,7 @@ typedef struct
         XNZ_AP_COMM =   2,
         XNZ_AP_TOGG =   3,
         XNZ_AP_FF32 = 320,
+        XNZ_AP_XGFC = 700, // X-Plane 11.30 or later: GFC-700
     } xnz_ap;
 
     union
@@ -1688,7 +1689,28 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 if (global_context->commands.xnz_ap == XNZ_AP_ERRR)
                 {
-                    global_context->commands.xnz_ap = XNZ_AP_XPLM; // assume default X-Plane until proven otherwise
+                    if (NULL != XPLMFindDataRef("sim/version/xplane_internal_version")) // lazy XP11+ detection
+                    {
+                        if ((ref = XPLMFindDataRef("sim/aircraft/autopilot/preconfigured_ap_type")))
+                        {
+                            if (2 == XPLMGetDatai(ref)) // 2=GFC-700
+                            {
+                                global_context->commands.xnz_ap = XNZ_AP_XGFC;
+                            }
+                            else
+                            {
+                                global_context->commands.xnz_ap = XNZ_AP_XPLM; // assume default X-Plane until proven otherwise
+                            }
+                        }
+                        else
+                        {
+                            global_context->commands.xnz_ap = XNZ_AP_XPLM; // assume default X-Plane until proven otherwise
+                        }
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_ap = XNZ_AP_XPLM; // assume default X-Plane until proven otherwise
+                    }
                 }
                 if (global_context->commands.xnz_at == XNZ_AT_ERRR)
                 {
@@ -1986,7 +2008,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     else
                     {
                         global_context->commands.xnz_ab = XNZ_AB_NONE;
-                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_ap = XNZ_AP_XGFC;
                         global_context->commands.xnz_at = XNZ_AT_NONE;
                         global_context->commands.xnz_bt = XNZ_BT_XPLM;
                         global_context->commands.xnz_et = XNZ_ET_DA62;
@@ -2021,7 +2043,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     else
                     {
                         global_context->commands.xnz_ab = XNZ_AB_NONE;
-                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_ap = XNZ_AP_XGFC;
                         global_context->commands.xnz_at = XNZ_AT_NONE; // note: CSC controlled via A/P panel only
                         global_context->commands.xnz_bt = XNZ_BT_XPLM;
                         global_context->commands.xnz_et = XNZ_ET_E55P;
@@ -2052,7 +2074,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     else
                     {
                         global_context->commands.xnz_ab = XNZ_AB_NONE;
-                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_ap = XNZ_AP_XGFC;
                         global_context->commands.xnz_at = XNZ_AT_NONE; // note: CSC controlled via A/P panel only
                         global_context->commands.xnz_bt = XNZ_BT_XPLM;
                         global_context->commands.xnz_et = XNZ_ET_EVIC;
