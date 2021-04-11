@@ -2195,9 +2195,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     switch (global_context->commands.xnz_et)
                     {
                         case XNZ_ET_DA62:
-                            global_context->zones_info.share[ZONE_CLB] = 0.45f;
-                            global_context->zones_info.share[ZONE_FLX] = 0.90f - global_context->zones_info.share[ZONE_CLB]; // slightly below maximum continuous thrust
-                            global_context->zones_info.share[ZONE_TGA] = 1.00f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB];
+                            global_context->zones_info.share[ZONE_CLB] = 0.4745f;
+                            global_context->zones_info.share[ZONE_FLX] = 0.9490f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
+                            global_context->zones_info.share[ZONE_TGA] = 1.0000f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB];
                             break;
 
                         case XNZ_ET_E35L:
@@ -2207,14 +2207,14 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             break;
 
                         case XNZ_ET_EA50:
-                            global_context->zones_info.share[ZONE_CLB] = 0.451875f; // ~60% N1
-                            global_context->zones_info.share[ZONE_FLX] = 0.875000f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
-                            global_context->zones_info.share[ZONE_TGA] = 0.943750f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~100% N1
+                            global_context->zones_info.share[ZONE_CLB] = 0.500000f; // ~63% N1 @ MSL (level off power)
+                            global_context->zones_info.share[ZONE_FLX] = 0.883175f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
+                            global_context->zones_info.share[ZONE_TGA] = 0.943875f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~100% N1
                             break;
 
                         case XNZ_ET_EVIC:
-                            global_context->zones_info.share[ZONE_CLB] = 0.358750f; // ~60% N1
-                            global_context->zones_info.share[ZONE_FLX] = 0.875000f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
+                            global_context->zones_info.share[ZONE_CLB] = 0.500000f; // ~70% N1 @ MSL (economy cruise power)
+                            global_context->zones_info.share[ZONE_FLX] = 0.887425f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
                             global_context->zones_info.share[ZONE_TGA] = 0.971875f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~100% N1
                             break;
 
