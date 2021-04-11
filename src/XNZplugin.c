@@ -134,6 +134,7 @@ typedef struct
         XNZ_AT_COMM =   2,
         XNZ_AT_TOGG =   3,
         XNZ_AT_APTO =   4,
+        XNZ_AT_XP11 =  11,
         XNZ_AT_FF32 = 320,
         XNZ_AT_TOLI = 321,
     } xnz_at;
@@ -1714,7 +1715,28 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 if (global_context->commands.xnz_at == XNZ_AT_ERRR)
                 {
-                    global_context->commands.xnz_at = XNZ_AT_NONE; // no reliable way to detect, enable on case-by-case basis below
+                    if (NULL != XPLMFindDataRef("sim/version/xplane_internal_version")) // lazy XP11+ detection
+                    {
+                        if ((ref = XPLMFindDataRef("sim/aircraft/autopilot/preconfigured_ap_type")))
+                        {
+                            if (1 == XPLMGetDatai(ref)) // 1=Airliner
+                            {
+                                global_context->commands.xnz_ap = XNZ_AT_XP11;
+                            }
+                            else
+                            {
+                                global_context->commands.xnz_at = XNZ_AT_NONE; // no reliable way to detect, enable on case-by-case basis below
+                            }
+                        }
+                        else
+                        {
+                            global_context->commands.xnz_at = XNZ_AT_NONE; // no reliable way to detect, enable on case-by-case basis below
+                        }
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_at = XNZ_AT_NONE; // no reliable way to detect, enable on case-by-case basis below
+                    }
                 }
                 if (global_context->commands.xnz_bt == XNZ_BT_ERRR)
                 {
@@ -3669,7 +3691,11 @@ static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
         {
             case XNZ_AT_APTO:
             case XNZ_AT_NONE:
-                XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.ap_cw_st);
+                if (((xnz_cmd_context*)inRefcon)->xnz_ap == XNZ_AP_XGFC)
+                {
+                    XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.ap_cw_st);
+                    return 0;
+                }
                 return 0;
 
             default:
@@ -3681,13 +3707,14 @@ static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
     {
         switch (((xnz_cmd_context*)inRefcon)->xnz_at)
         {
-            case XNZ_AT_XPLM:
+            case XNZ_AT_XP11:
                 if (((xnz_cmd_context*)inRefcon)->xp.at_at_n1)
                 {
                     XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
                     XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_n1);
                     return 0;
                 }
+            case XNZ_AT_XPLM:
                 XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_to_ga);
                 XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_on);
                 return 0;
@@ -3702,7 +3729,11 @@ static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
             case XNZ_AT_APTO:
             case XNZ_AT_NONE:
-                XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.ap_cw_st);
+                if (((xnz_cmd_context*)inRefcon)->xnz_ap == XNZ_AP_XGFC)
+                {
+                    XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.ap_cw_st);
+                    return 0;
+                }
                 return 0;
 
             case XNZ_AT_ERRR:
