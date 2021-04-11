@@ -2195,9 +2195,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     switch (global_context->commands.xnz_et)
                     {
                         case XNZ_ET_DA62:
-                            global_context->zones_info.share[ZONE_CLB] = 0.4745f;
-                            global_context->zones_info.share[ZONE_FLX] = 0.9490f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
-                            global_context->zones_info.share[ZONE_TGA] = 1.0000f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB];
+                            global_context->zones_info.share[ZONE_CLB] = 0.46875f;
+                            global_context->zones_info.share[ZONE_FLX] = 0.93750f - global_context->zones_info.share[ZONE_CLB]; // safely below maximum continuous thrust
+                            global_context->zones_info.share[ZONE_TGA] = 1.00000f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB];
                             break;
 
                         case XNZ_ET_E35L:
