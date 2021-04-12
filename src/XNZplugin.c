@@ -1651,7 +1651,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->acf_has_beta_thrust = XPLMGetDatai(global_context->rev_info[0]) != 0;
                         global_context->acft_has_rev_thrust =
                         (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
-                         XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
+                         XPLMGetDataf(global_context->rev_info[2]) >= .01f);
                         break;
 
                     case 4: // turbojet
@@ -1659,7 +1659,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->acf_has_beta_thrust = 0;
                         global_context->acft_has_rev_thrust =
                         (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
-                         XPLMGetDataf(global_context->rev_info[2]) >= 0.1f);
+                         XPLMGetDataf(global_context->rev_info[2]) >= .01f);
                         break;
 
                     default:
