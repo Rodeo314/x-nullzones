@@ -1647,6 +1647,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 {
                     case 2: // turboprop
                     case 8: // turboprop
+                    case 9: // turboprop (XP11+, not documented in Datarefs.txt)
                         global_context->acf_has_beta_thrust = XPLMGetDatai(global_context->rev_info[0]) != 0;
                         global_context->acft_has_rev_thrust =
                         (XPLMGetDatai(global_context->rev_info[1]) != 0 &&
