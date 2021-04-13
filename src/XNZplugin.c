@@ -217,6 +217,7 @@ typedef struct
         XNZ_ET_XPJT =   1,
         XNZ_ET_XPTP =   2,
         XNZ_ET_XPPI =   3,
+        XNZ_ET_RPTP =  12, // Carenado PC-12 + REP
         XNZ_ET_DA62 =  62,
         XNZ_ET_E35L = 135,
         XNZ_ET_FF32 = 320,
@@ -1667,6 +1668,11 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->acft_has_rev_thrust = 0;
                         break;
                 }
+                /*
+                 * XXX: disable globally; re-enable on a case-by-case basis until
+                 * I can get a better understanding of X-Plane's default behavior…
+                 */
+                global_context->acf_has_beta_thrust = 0;
 
                 /* check for custom thrust datarefs/API */
                 int auth_desc_icao = 0;
@@ -1765,6 +1771,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 
                             case 2:
                             case 8: // free/fixed turbine engines
+                            case 9: // turbine engine too (XP11+)
                                 global_context->commands.xnz_et = XNZ_ET_XPTP;
                                 break;
 
@@ -2771,7 +2778,7 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
 #endif
 }
 
-static inline float throttle_mapping_hstbm9(float input, thrust_zones z)
+static inline float throttle_mapping_nl_rev(float input, thrust_zones z)
 {
     if (input > z.max[ZONE_TGA])
     {
@@ -3091,7 +3098,7 @@ static void throttle_axes(xnz_context *ctx)
                 XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE);
                 return;
             }
-            f_stick_val[0] = throttle_mapping_hstbm9(1.0f - f_stick_val[0], ctx->zones_info);
+            f_stick_val[0] = throttle_mapping_nl_rev(1.0f - f_stick_val[0], ctx->zones_info);
             break;
 
         default:
@@ -3108,6 +3115,14 @@ static void throttle_axes(xnz_context *ctx)
                     f_stick_val[1] = throttle_mapping_abe55p(1.0f - f_stick_val[1], ctx->zones_info);
                     break;
 #endif
+                case XNZ_ET_XPTP:
+                case XNZ_ET_RPTP:
+                    if (ctx->acft_has_rev_thrust)
+                    {
+                        f_stick_val[0] = throttle_mapping_nl_rev(1.0f - f_stick_val[0], ctx->zones_info);
+                        f_stick_val[1] = throttle_mapping_nl_rev(1.0f - f_stick_val[1], ctx->zones_info);
+                        break;
+                    } // fall through
                 default:
                     if (ctx->acft_has_rev_thrust)
                     {
