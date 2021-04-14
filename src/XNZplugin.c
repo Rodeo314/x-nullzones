@@ -3060,6 +3060,8 @@ static int skip_idle_overwrite(xnz_context *ctx, float f_stick_val[2])
 
 static void throttle_axes(xnz_context *ctx)
 {
+    // TODO: read-only datarefs to monitor axis input and commanded XNZ throttle
+    // (write -2.0f to dataref when skipping idle overwrite or authrottle active)
     float f_stick_val[2];
     XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
     XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, ctx->arcrft_engine_count);
@@ -3176,6 +3178,7 @@ static float axes_hdlr_fnc(float inElapsedSinceLastCall,
                            int   inCounter,
                            void *inRefcon)
 {
+#ifdef PUBLIC_RELEASE_PUILD
     if (inRefcon)
     {
         /* shall we be doing something? */
@@ -3188,6 +3191,11 @@ static float axes_hdlr_fnc(float inElapsedSinceLastCall,
     }
     XPLMDebugString(XNZ_LOG_PREFIX"[error]: callback_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
+#else
+    // XXX: fixme: disable until I figure out what was going on earlier…
+    XPLMDebugString(XNZ_LOG_PREFIX"[debug]: callback_hdlr: disabled for testing purposes\n");
+    return 0;
+#endif
 }
 
 static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
