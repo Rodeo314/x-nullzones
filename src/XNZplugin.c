@@ -2687,7 +2687,7 @@ static inline float throttle_mapping_abe55p(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return jitter_protection(0.5205f * non_linear_centered(t));
+        return jitter_protection(0.5205f * linear_standard(t));
     }
     return 0.0f; // no reverse
 }
@@ -2713,7 +2713,7 @@ static inline float throttle_mapping_ddcl30(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return jitter_protection(2.4f / 3.0f * non_linear_centered(t));
+        return jitter_protection(2.4f / 3.0f * linear_standard(t));
     }
     if (input > z.max[ZONE_REV])
     {
@@ -2756,7 +2756,7 @@ static inline float throttle_mapping_toliss(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return jitter_protection(0.68f * non_linear_centered(t));
+        return jitter_protection(0.68f * linear_standard(t));
     }
     if (input > z.max[ZONE_REV])
     {
