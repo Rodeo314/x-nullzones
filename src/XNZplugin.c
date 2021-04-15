@@ -533,6 +533,7 @@ typedef struct
     char overly_txt_buf[11];
     int throttle_did_change;
     int ice_detect_positive;
+    int overly_position_set;
     XPLMDataRef f_ice_rf[4];
     XPWidgetID  widgetid[2];
     XPLMCommandRef print_ax;
@@ -788,6 +789,7 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (widgetid)\n"); goto fail;
     }
+    global_context->overly_position_set = 0; // X-Plane window's actual boundaries not yet available/reliable
     XPSetWidgetProperty(global_context->widgetid[0], xpProperty_MainWindowType, xpMainWindowStyle_Translucent);
     XPSetWidgetProperty(global_context->widgetid[1], xpProperty_CaptionLit, 1);
     XPSetWidgetGeometry(global_context->widgetid[0], 0, 56 - 0, 64 - 0, 0);
@@ -2240,13 +2242,20 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 xnz_log("determined park brake type %d\n", global_context->commands.xnz_pb);
 
 #ifndef PUBLIC_RELEASE_BUILD
-                /* re-position throttle change/ice detection overlay */
-                int outL, outT, outR, outB, outW, outH; XPLMGetScreenSize(&outW, &outH);
-                XPGetWidgetGeometry(global_context->widgetid[0], &outL, &outT, &outR, &outB);
-                int xOff = outW - outR, yOff = outH - outT; outL += xOff; outR += xOff; outT += yOff; outB += yOff;
-                XPSetWidgetGeometry(global_context->widgetid[0], outL + 0, outT - 0, outR - 0, outB + 0);
-                XPSetWidgetGeometry(global_context->widgetid[1], outL + 7, outT - 7, outR - 7, outB + 7);
-                xnz_log("[info]: overlay: W: %d | H: %d | X: %d -> %d | Y: %d -> %d\n", outW, outH, outL, outR, outB, outT);
+                if (global_context->overly_position_set == 0)
+                {
+                    /*
+                     * re-position throttle change/ice detection overlay for a laptop display
+                     * Aerobask GTN 750 ~788px high: ((1120 - 788 = 332) / 1220) = (83 / 280)
+                     */
+                    int outW, outH, outL, yOff; XPLMGetScreenSize(&outW, &outH); yOff = (outH - ((outH * 83) / 280));
+                    int outT, outR, outB, xOff; XPGetWidgetGeometry(global_context->widgetid[0], &outL, &outT, &outR, &outB);
+                    /* center */ xOff = ((outW - (outR - outL)) / 2); outL += xOff; outR += xOff; outT += yOff; outB += yOff;
+                    XPSetWidgetGeometry(global_context->widgetid[0], outL + 0, outT - 0, outR - 0, outB + 0);
+                    XPSetWidgetGeometry(global_context->widgetid[1], outL + 7, outT - 7, outR - 7, outB + 7);
+                    xnz_log("[info]: overlay: W: %d | H: %d | X: %d -> %d | Y: %d -> %d\n", outW, outH, outL, outR, outB, outT);
+                    global_context->overly_position_set = 1;
+                }
 #endif
 
                 /* TCA thrust quadrant support */
