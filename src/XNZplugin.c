@@ -595,6 +595,7 @@ typedef struct
     XPLMMenuID id_th_on_off;
     int id_menu_item_on_off;
     int tca_support_enabled;
+    int msg_will_write_pref;
     int skip_idle_overwrite;
     thrust_zones zones_info;
 }
@@ -1426,11 +1427,6 @@ static void xnz_context_reset(xnz_context *ctx)
         }
 #endif
         XPLMSetFlightLoopCallbackInterval(ctx->f_l_th, 0, 1, ctx);
-        if (ctx->idx_throttle_axis_1 >= 0)
-        {
-            int th_axis_ass[2] = { 20, 21, };
-            XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
-        }
         default_throt_share(&ctx->zones_info);
         ctx->commands.xnz_at = XNZ_AT_ERRR;
         ctx->commands.xnz_ab = XNZ_AB_ERRR;
@@ -1512,6 +1508,7 @@ PLUGIN_API void XPluginDisable(void)
     if (global_context->idx_throttle_axis_1 >= 0)
     {
         int th_axis_ass[2] = { 20, 21, };
+        xnz_log("[info]: releasing joystick axes (XPluginDisable)\n");
         XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
     }
 
@@ -1568,6 +1565,16 @@ static inline void dref_read_str(XPLMDataRef ref, char *buf, size_t siz)
 
 PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, void *inParam)
 {
+    if (global_context->msg_will_write_pref != 0)
+    {
+        if (global_context->idx_throttle_axis_1 >= 0 && global_context->tca_support_enabled != 0)
+        {
+            int no_axis_ass[2] = { 0, 0, };
+            xnz_log("[info]: re-capturing joystick axes (XPLM_MSG_WILL_WRITE_PREFS done)\n");
+            XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
+        }
+        global_context->msg_will_write_pref = 0;
+    }
     switch (inMessage)
     {
         case XPLM_MSG_WILL_WRITE_PREFS:
@@ -1580,6 +1587,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             if (global_context->idx_throttle_axis_1 >= 0)
             {
                 int th_axis_ass[2] = { 20, 21, };
+                global_context->msg_will_write_pref = 1;
                 xnz_log("[info]: releasing joystick axes (XPLM_MSG_WILL_WRITE_PREFS)\n");
                 XPLMSetDatavi(global_context->i_stick_ass, th_axis_ass, global_context->idx_throttle_axis_1, 2);
             }
@@ -1601,9 +1609,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
             break;
 
         case XPLM_MSG_LIVERY_LOADED:
-            if (inParam == XPLM_USER_AIRCRAFT && !global_context->i_context_init_done) // wait until aircraft plugins loaded (for custom datarefs)
+            if (inParam != XPLM_USER_AIRCRAFT)
             {
-                XPLMPluginID test = XPLM_NO_PLUGIN_ID;
+                break; // not user aircraft, initialization not required nor desirable here
+            }
+            else // deferred initialization: wait for initial livery load after aircraft load -> custom aircraft plugins loaded, if any (for custom datarefs)
+            {
+                if (global_context->i_context_init_done)
+                {
+                    break; // don't re-init on subsequent livery changes
+                }
 #ifndef PUBLIC_RELEASE_BUILD
                 global_context->minimum_null_zone = 0.04f; // hardcoded for now
                 global_context->nominal_roll_coef = XPLMGetDataf(global_context->acf_roll_co);
@@ -1678,7 +1693,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 
                 /* check for custom thrust datarefs/API */
                 int auth_desc_icao = 0;
-                XPLMDataRef ref = NULL;
+                XPLMDataRef ref; XPLMPluginID pid;
                 char auth[501], desc[261], icao[41];
                 if ((ref = XPLMFindDataRef("sim/aircraft/view/acf_author")))
                 {
@@ -1749,7 +1764,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 if (global_context->commands.xnz_bt == XNZ_BT_ERRR)
                 {
-                    if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("com.simcoders.rep"))) && (XPLMIsPluginEnabled(test))))
+                    if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("com.simcoders.rep"))) && (XPLMIsPluginEnabled(pid))))
                     {
                         global_context->commands.xnz_bt = XNZ_BT_SIMC; // use parkbrake and slightly increased strength
                         global_context->commands.xp.pbrak_onoff = -1; // initialize our parking brake tracking variable
@@ -1800,7 +1815,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 {
                     global_context->xnz_tt = XNZ_TT_XPLM; // assume default X-Plane until proven otherwise
                 }
-                if ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(XPLM_FF_SIGNATURE))) && (XPLMIsPluginEnabled(test)))
+                if ((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature(XPLM_FF_SIGNATURE))) && (XPLMIsPluginEnabled(pid)))
                 {
                     global_context->  commands.xnz_ab = XNZ_AB_FF32;
                     global_context->  commands.xnz_ap = XNZ_AP_FF32;
@@ -1811,10 +1826,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     global_context->           xnz_tt = XNZ_TT_FF32;
                     global_context->tt.ff32.api_has_initialized = 0;
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
-                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP10.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))) ||
-                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(test))) ||
-                         ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("XP10.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(pid))) ||
+                         ((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("XP10.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(pid))) ||
+                         ((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("XP11.ToLiss.A319.systems"))) && (XPLMIsPluginEnabled(pid))) ||
+                         ((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("XP11.ToLiss.A321.systems"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (NULL == (global_context->         tt.toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input"                         )) ||
                         NULL == (global_context->commands.pb.to32.pbrak_onoff = XPLMFindDataRef("AirbusFBW/ParkBrake"                              )) ||
@@ -1851,10 +1866,10 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->         xnz_tt = XNZ_TT_TOLI;
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ToLiSs.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.4--
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("ToLiSs.Airbus.systems"))) && (XPLMIsPluginEnabled(pid)))) // A350v1.4--
                 {
-                    if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature(  "FFSTSmousehandler")))) || // A350v1.3--
-                        ((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.ffsts.mousehandler"))))) // A350v1.4.x
+                    if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature(  "FFSTSmousehandler")))) || // A350v1.3--
+                        ((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("ru.ffsts.mousehandler"))))) // A350v1.4.x
                     {
                         if (NULL == (global_context->tt.toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input" )) ||
                             NULL == (global_context->commands.pb.ff35.pbrak_offon = XPLMFindDataRef("1-sim/parckBrake")))
@@ -1880,9 +1895,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         }
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(test)))) // A350v1.6++
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("XP11.ToLiss.Airbus.systems"))) && (XPLMIsPluginEnabled(pid)))) // A350v1.6++
                 {
-                    if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.stsff.mousehandler"))))) // A350v1.6++
+                    if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("ru.stsff.mousehandler"))))) // A350v1.6++
                     {
                         if (NULL == (global_context->         tt.toli.f_thr_array = XPLMFindDataRef("AirbusFBW/throttle_input"      )) ||
                             NULL == (global_context->commands.pb.ff35.pbrak_offon = XPLMFindDataRef("1-sim/parckBrake"              )) ||
@@ -1915,9 +1930,9 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         }
                     }
                 }
-                else if (XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.stsff.757767avionics")) ||
-                         XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ru.flightfactor-steptosky.757767avionics")) ||
-                         XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("de-ru.philippmuenzel-den_rain.757avionics")))
+                else if (XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("ru.stsff.757767avionics")) ||
+                         XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("ru.flightfactor-steptosky.757767avionics")) ||
+                         XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("de-ru.philippmuenzel-den_rain.757avionics")))
                 {
                     if (NULL == (global_context->commands.at.comm.cmd_at_disc = XPLMFindCommand("1-sim/comm/AP/at_disc")) ||
                         NULL == (global_context->commands.at.comm.cmd_at_toga = XPLMFindCommand("1-sim/comm/AP/at_toga")) ||
@@ -1946,7 +1961,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->         xnz_tt = XNZ_TT_XPLM;
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("ERJ_Functions"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("ERJ_Functions"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (!strncasecmp(icao, "E35L", strlen("E35L")))
                     {
@@ -1979,7 +1994,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         }
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("hotstart.tbm900"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("hotstart.tbm900"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (NULL == (global_context->            tt.tbm9.engn_rng = XPLMFindDataRef("tbm900/systems/engine/range"        )) ||
                         NULL == (global_context->commands.bt.tbm9.rbrak_array = XPLMFindDataRef("tbm900/controls/gear/brake_req"     )) ||
@@ -2015,7 +2030,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->         xnz_tt = XNZ_TT_TBM9;
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Diamond_DA62"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("1-sim Diamond_DA62"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (NULL == (global_context->commands.et.da62.drf_mod_ec1 = XPLMFindDataRef("aerobask/eng/sw_ecu_ab1")) ||
                         NULL == (global_context->commands.et.da62.drf_mod_ec2 = XPLMFindDataRef("aerobask/eng/sw_ecu_ab2")) ||
@@ -2048,7 +2063,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->         xnz_tt = XNZ_TT_XPLM;
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Phenom_300"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("1-sim Phenom_300"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (NULL == (global_context->commands.et.e55p.drf_e_1_ign = XPLMFindDataRef("aerobask/engines/sw_ignition_1"    )) ||
                         NULL == (global_context->commands.et.e55p.drf_e_2_ign = XPLMFindDataRef("aerobask/engines/sw_ignition_2"    )) ||
@@ -2083,7 +2098,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->         xnz_tt = XNZ_TT_XPLM;
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim Victory G1000"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("1-sim Victory G1000"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (NULL == (global_context->commands.et.evic.drf_fuel_at = XPLMFindDataRef("aerobask/lt_fuel_auto"           )) ||
                         NULL == (global_context->commands.et.evic.cmd_e_1_onn = XPLMFindCommand("sim/fuel/fuel_pump_1_on"         )) ||
@@ -2115,7 +2130,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     }
                 }
                 /* must test SASL and Gizmo last */
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("1-sim.sasl"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("1-sim.sasl"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (auth_desc_icao)
                     {
@@ -2161,7 +2176,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         }
                     }
                 }
-                else if (((XPLM_NO_PLUGIN_ID != (test = XPLMFindPluginBySignature("gizmo.x-plugins.com"))) && (XPLMIsPluginEnabled(test))))
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("gizmo.x-plugins.com"))) && (XPLMIsPluginEnabled(pid))))
                 {
                     if (auth_desc_icao)
                     {
@@ -2259,7 +2274,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
 #endif
 
                 /* TCA thrust quadrant support */
-                if (global_context->idx_throttle_axis_1 < 0)
+                if (global_context->idx_throttle_axis_1 < 0) // detection: runs only once
                 {
                     size_t size = global_context->i_version_simulator < 11000 ? 100 : 500;
                     for (size_t i = 0; i < size - 1; i++)
@@ -2310,7 +2325,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         xnz_log("[debug]: throttle_mapping ---------------\n");
                     }
                 }
-                if (global_context->idx_throttle_axis_1 >= 0)
+                if (global_context->idx_throttle_axis_1 >= 0) // capture: run every initial aircraft+livery reload
                 {
 #ifdef PUBLIC_RELEASE_BUILD
                     // TODO: implement A320 API support
@@ -2323,13 +2338,16 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                     else
 #endif
                     {
-                        int no_axis_ass[2] = { 0, 0, };
-                        XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
+                        if (global_context->tca_support_enabled)
+                        {
+                            int no_axis_ass[2] = { 0, 0, };
+                            xnz_log("[info]: capturing/re-capturing joystick axes (flight loop enabled)\n");
+                            XPLMSetDatavi(global_context->i_stick_ass, no_axis_ass, global_context->idx_throttle_axis_1, 2);
+                        }
                     }
-                    global_context->skip_idle_overwrite = 0;
-                    XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
-                    xnz_log("setting TCA flight loop callback interval (enabled: %s)\n",
-                            global_context->tca_support_enabled == 0 ? "no" : "yes");
+                    global_context->skip_idle_overwrite = 0; XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
+                    xnz_log("setting TCA flight loop callback interval (enabled: %d)\n",
+                            global_context->tca_support_enabled == 0);
                     xnz_log("engine type %d beta %d (%d) reverse %d (%d, %f)\n",
                             acf_en_type[0],
                             global_context->acf_has_beta_thrust,
@@ -3067,10 +3085,10 @@ static int skip_idle_overwrite(xnz_context *ctx, float f_stick_val[2])
     return ctx->skip_idle_overwrite = 0;
 }
 
+// TODO: fixme: read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
+// skip_idle_overwrite/authrottle_active: XNZ commanded th. variable -2.0f, resp. -3.0f
 static void throttle_axes(xnz_context *ctx)
 {
-    // TODO: read-only datarefs to monitor axis input and commanded XNZ throttle
-    // (write -2.0f to dataref when skipping idle overwrite or authrottle active)
     float f_stick_val[2];
     XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
     XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, ctx->arcrft_engine_count);
@@ -3187,7 +3205,6 @@ static float axes_hdlr_fnc(float inElapsedSinceLastCall,
                            int   inCounter,
                            void *inRefcon)
 {
-#ifdef PUBLIC_RELEASE_PUILD
     if (inRefcon)
     {
         /* shall we be doing something? */
@@ -3200,11 +3217,6 @@ static float axes_hdlr_fnc(float inElapsedSinceLastCall,
     }
     XPLMDebugString(XNZ_LOG_PREFIX"[error]: callback_hdlr: inRefcon == NULL, disabling callback\n");
     return 0;
-#else
-    // XXX: fixme: disable until I figure out what was going on earlier…
-    XPLMDebugString(XNZ_LOG_PREFIX"[debug]: callback_hdlr: disabled for testing purposes\n");
-    return 0;
-#endif
 }
 
 static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
@@ -3217,32 +3229,35 @@ static void menu_hdlr_fnc(void *inMenuRef, void *inItemRef)
             xnz_context *ctx = inMenuRef;
             if (*item == ctx->id_menu_item_on_off)
             {
-                XPLMMenuCheck state = xplm_Menu_Checked;
-                XPLMCheckMenuItemState(ctx->id_th_on_off, ctx->id_menu_item_on_off, &state);
-                if (state == xplm_Menu_Checked)
+                XPLMMenuCheck s; XPLMCheckMenuItemState(ctx->id_th_on_off, ctx->id_menu_item_on_off, &s);
+                if (s == xplm_Menu_Checked)
                 {
-#ifdef PUBLIC_RELEASE_BUILD
-                    if (ctx->idx_throttle_axis_1 >= 0)
-                    {
-                        int th_axis_ass[2] = { 20, 21, };
-                        XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
-                    }
-#endif
                     XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_NoCheck);
                     xnz_log("[info]: menu: disabling TCA flight loop callback\n");
                     global_context->tca_support_enabled = 0;
                     global_context->skip_idle_overwrite = 0;
+#ifdef PUBLIC_RELEASE_BUILD
+                    if (ctx->idx_throttle_axis_1 >= 0)
+                    {
+                        int th_axis_ass[2] = { 20, 21, };
+                        xnz_log("[info]: releasing joystick axes (flight loop disabled)\n");
+                        XPLMSetDatavi(ctx->i_stick_ass, th_axis_ass, ctx->idx_throttle_axis_1, 2);
+                    }
+#endif
                     return;
-                }
-                if (ctx->idx_throttle_axis_1 >= 0)
-                {
-                    int no_axis_ass[2] = { 0, 0, };
-                    XPLMSetDatavi(ctx->i_stick_ass, no_axis_ass, ctx->idx_throttle_axis_1, 2);
                 }
                 XPLMCheckMenuItem(ctx->id_th_on_off, ctx->id_menu_item_on_off, xplm_Menu_Checked);
                 xnz_log("[info]: menu: enabling TCA flight loop callback\n");
                 global_context->tca_support_enabled = 1;
                 global_context->skip_idle_overwrite = 0;
+#ifdef PUBLIC_RELEASE_BUILD
+                if (ctx->idx_throttle_axis_1 >= 0)
+                {
+                    int no_axis_ass[2] = { 0, 0, };
+                    XPLMSetDatavi(ctx->i_stick_ass, no_axis_ass, ctx->idx_throttle_axis_1, 2);
+                    xnz_log("[info]: menu: re-capturing joystick axes (flight loop enabled)\n");
+                }
+#endif
                 return;
             }
             return;
