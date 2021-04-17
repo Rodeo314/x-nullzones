@@ -3193,11 +3193,11 @@ static void throttle_axes(xnz_context *ctx)
         ctx->avrg_throttle_out = XNZ_THOUT_SK;
         return;
     }
-    else
+    if (ctx->xnz_tt != XNZ_TT_TBM9)
     {
         // store before sign possibly changed by fwd_beta_rev_thrust()
-        avrg_throttle_out = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
         // but only set variable later (if actually writing th. ratio)
+        avrg_throttle_out = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
     }
     if (fwd_beta_rev_thrust(ctx, f_stick_val))
     {
