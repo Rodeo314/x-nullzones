@@ -3197,20 +3197,17 @@ static void throttle_axes(xnz_context *ctx)
     {
         // store before sign possibly changed by fwd_beta_rev_thrust()
         avrg_throttle_out = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
+        // but only set variable later (if actually writing th. ratio)
     }
     if (fwd_beta_rev_thrust(ctx, f_stick_val))
     {
         return;
     }
-    else
-    {
-        // but only set if we are actually writing
-        ctx->avrg_throttle_out = avrg_throttle_out;
-    }
     switch (ctx->xnz_tt)
     {
         case XNZ_TT_TOLI:
             XPLMSetDatavf(ctx->tt.toli.f_thr_array, f_stick_val, 0, 2);
+            ctx->avrg_throttle_out = avrg_throttle_out;
             return;
 
         case XNZ_TT_TBM9:
@@ -3225,6 +3222,7 @@ static void throttle_axes(xnz_context *ctx)
             return; // flight range
 
         default:
+            ctx->avrg_throttle_out = avrg_throttle_out;
             break;
     }
     if (ctx->arcrft_engine_count == 2)
@@ -3232,7 +3230,7 @@ static void throttle_axes(xnz_context *ctx)
         XPLMSetDatavf(ctx->f_thr_array, f_stick_val, 0, 2);
         return;
     }
-    XPLMSetDataf(ctx->f_throttall, ctx->avrg_throttle_out);
+    XPLMSetDataf(ctx->f_throttall, f_stick_val[0]); // sign may differ from avrg_throttle_out
     return;
 }
 
