@@ -592,6 +592,14 @@ typedef struct
     XPLMDataRef f_throttall;
     XPLMDataRef f_thr_array;
 
+#define XNZ_THINN_NO (-1.0f)
+#define XNZ_THOUT_AT (-2.0f)
+#define XNZ_THOUT_SK (-3.0f)
+    float avrg_throttle_inn;
+    XPLMDataRef f_throt_inn;
+    float avrg_throttle_out;
+    XPLMDataRef f_throt_out;
+
     XPLMMenuID id_th_on_off;
     int id_menu_item_on_off;
     int tca_support_enabled;
@@ -669,6 +677,11 @@ static int xnz_log(const char *format, ...)
 PLUGIN_API void XPluginStop(void)
 {
     return;
+}
+
+static float XNZGetDataf(void *inRefcon)
+{
+    return ((float*)inRefcon)[0]; // https://developer.x-plane.com/sdk/XPLMRegisterDataAccessor/
 }
 
 #define HS_TBM9_IDLE (0.35f)
@@ -1362,6 +1375,8 @@ PLUGIN_API int XPluginEnable(void)
     global_context->commands.xp_11_50_or_later = (outXPlaneVersion > 11499);
 #endif
 
+    // TODO: fixme: register read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
+
     /* TCA quadrant support: toggle on/off via menu */
     if (NULL == (global_context->id_th_on_off = XPLMCreateMenu(XNZ_XPLM_TITLE, NULL, 0, &menu_hdlr_fnc, global_context)))
     {
@@ -1503,6 +1518,8 @@ PLUGIN_API void XPluginDisable(void)
 #endif
 
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
+
+    // TODO: fixme: un-register read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
 
     /* re-enable throttle 1/2 axes */
     if (global_context->idx_throttle_axis_1 >= 0)
@@ -3085,31 +3102,37 @@ static int skip_idle_overwrite(xnz_context *ctx, float f_stick_val[2])
     return ctx->skip_idle_overwrite = 0;
 }
 
-// TODO: fixme: read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
-// skip_idle_overwrite/authrottle_active: XNZ commanded th. variable -2.0f, resp. -3.0f
 static void throttle_axes(xnz_context *ctx)
 {
-    float f_stick_val[2];
+    float f_stick_val[2], avrg_throttle_out;
     XPLMGetDatavf(ctx->f_stick_val, f_stick_val, ctx->idx_throttle_axis_1, 2);
     XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, ctx->arcrft_engine_count);
     if (autothrottle_active(ctx))
     {
+        ctx->avrg_throttle_inn = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
+        ctx->avrg_throttle_out = XNZ_THOUT_AT;
         return;
     }
     if (ctx->i_got_axis_input[0] == 0)
     {
         if (f_stick_val[0] < TCA_DEADBAND || f_stick_val[1] < TCA_DEADBAND)
         {
-            return; // haven't received input from hardware yet
+            ctx->avrg_throttle_out = XPLMGetDataf(ctx->f_throttall);
+            ctx->avrg_throttle_inn = XNZ_THINN_NO;
+            return;
         }
+        ctx->avrg_throttle_inn = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
         ctx->i_got_axis_input[0] = 1;
+    }
+    else
+    {
+        ctx->avrg_throttle_inn = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
     }
 #ifdef PUBLIC_RELEASE_BUILD
     if (ctx->arcrft_engine_count != 2 || fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
 #endif
     {
-        float sum = f_stick_val[0] + f_stick_val[1];
-        f_stick_val[0] = f_stick_val[1] = sum / 2.0f;
+        f_stick_val[0] = f_stick_val[1] = ctx->avrg_throttle_inn;
     }
     switch (ctx->xnz_tt)
     {
@@ -3167,11 +3190,22 @@ static void throttle_axes(xnz_context *ctx)
     }
     if (skip_idle_overwrite(ctx, f_stick_val))
     {
+        ctx->avrg_throttle_out = XNZ_THOUT_SK;
         return;
+    }
+    else
+    {
+        // store before sign possibly changed by fwd_beta_rev_thrust()
+        avrg_throttle_out = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
     }
     if (fwd_beta_rev_thrust(ctx, f_stick_val))
     {
         return;
+    }
+    else
+    {
+        // but only set if we are actually writing
+        ctx->avrg_throttle_out = avrg_throttle_out;
     }
     switch (ctx->xnz_tt)
     {
@@ -3182,10 +3216,12 @@ static void throttle_axes(xnz_context *ctx)
         case XNZ_TT_TBM9:
             if (XPLMGetDatai(ctx->tt.tbm9.engn_rng) > 3)
             {
-                XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE + ((HS_TBM9_IDLE) * f_stick_val[0]));
+                ctx->avrg_throttle_out = (HS_TBM9_IDLE + ((HS_TBM9_IDLE) * f_stick_val[0]));
+                XPLMSetDataf(ctx->f_throttall, ctx->avrg_throttle_out);
                 return; // beta or reverse range
             }
-            XPLMSetDataf(ctx->f_throttall, HS_TBM9_IDLE + ((1.0f - HS_TBM9_IDLE) * f_stick_val[0]));
+            ctx->avrg_throttle_out = (HS_TBM9_IDLE + ((1.0f - HS_TBM9_IDLE) * f_stick_val[0]));
+            XPLMSetDataf(ctx->f_throttall, ctx->avrg_throttle_out);
             return; // flight range
 
         default:
@@ -3196,7 +3232,7 @@ static void throttle_axes(xnz_context *ctx)
         XPLMSetDatavf(ctx->f_thr_array, f_stick_val, 0, 2);
         return;
     }
-    XPLMSetDataf(ctx->f_throttall, f_stick_val[0]);
+    XPLMSetDataf(ctx->f_throttall, ctx->avrg_throttle_out);
     return;
 }
 
@@ -5113,6 +5149,9 @@ static int chandler_printax(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 #undef XNZ_XPLM_TITLE
 #undef ACF_ROLL_SET
 #undef HS_TBM9_IDLE
+#undef XNZ_THINN_NO
+#undef XNZ_THOUT_AT
+#undef XNZ_THOUT_SK
 #undef MPS2KPH
 #undef MPS2KTS
 #undef T_SMALL
