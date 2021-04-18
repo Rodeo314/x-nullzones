@@ -3174,7 +3174,7 @@ static void throttle_axes(xnz_context *ctx)
     if (ctx->arcrft_engine_count != 2 || fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
 #endif
     {
-        f_stick_val[0] = f_stick_val[1] = ctx->avrg_throttle_inn;
+        f_stick_val[0] = f_stick_val[1] = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
     }
     switch (ctx->xnz_tt)
     {
