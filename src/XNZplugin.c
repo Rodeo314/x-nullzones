@@ -3143,7 +3143,7 @@ static void throttle_axes(xnz_context *ctx)
     XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, ctx->arcrft_engine_count);
     if (autothrottle_active(ctx))
     {
-        ctx->avrg_throttle_inn = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
+        ctx->avrg_throttle_inn = (1.0f - ((f_stick_val[0] + f_stick_val[1]) / 2.0f));
         ctx->avrg_throttle_out = XNZ_THOUT_AT;
         return;
     }
@@ -3155,12 +3155,12 @@ static void throttle_axes(xnz_context *ctx)
             ctx->avrg_throttle_inn = XNZ_THINN_NO;
             return;
         }
-        ctx->avrg_throttle_inn = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
+        ctx->avrg_throttle_inn = (1.0f - ((f_stick_val[0] + f_stick_val[1]) / 2.0f));
         ctx->i_got_axis_input[0] = 1;
     }
     else
     {
-        ctx->avrg_throttle_inn = ((f_stick_val[0] + f_stick_val[1]) / 2.0f);
+        ctx->avrg_throttle_inn = (1.0f - ((f_stick_val[0] + f_stick_val[1]) / 2.0f));
     }
 #ifdef PUBLIC_RELEASE_BUILD
     if (ctx->arcrft_engine_count != 2 || fabsf(f_stick_val[0] - f_stick_val[1]) < TCA_SYNCBAND)
