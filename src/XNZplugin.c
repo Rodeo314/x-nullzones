@@ -679,7 +679,7 @@ PLUGIN_API void XPluginStop(void)
     return;
 }
 
-static float XNZGetDataf(void *inRefcon)
+static float XNZGetDataf(void *inRefcon) // XPLMGetDataf_f
 {
     return ((float*)inRefcon)[0]; // https://developer.x-plane.com/sdk/XPLMRegisterDataAccessor/
 }
@@ -1375,7 +1375,31 @@ PLUGIN_API int XPluginEnable(void)
     global_context->commands.xp_11_50_or_later = (outXPlaneVersion > 11499);
 #endif
 
-    // TODO: fixme: register read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
+    /* Datarefs: axis input and XNZ-processed output */
+    if (NULL == (global_context->f_throt_inn = XPLMRegisterDataAccessor("xnz/throttle/ratio/inn",
+                                                                        xplmType_Float, 0,
+                                                                        NULL, NULL,
+                                                                        &XNZGetDataf, NULL,
+                                                                        NULL, NULL,
+                                                                        NULL, NULL,
+                                                                        NULL, NULL,
+                                                                        NULL, NULL,
+                                                                        &global_context->avrg_throttle_inn, NULL)))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (XPLMRegisterDataAccessor)\n"); goto fail;
+    }
+    if (NULL == (global_context->f_throt_out = XPLMRegisterDataAccessor("xnz/throttle/ratio/out",
+                                                                        xplmType_Float, 0,
+                                                                        NULL, NULL,
+                                                                        &XNZGetDataf, NULL,
+                                                                        NULL, NULL,
+                                                                        NULL, NULL,
+                                                                        NULL, NULL,
+                                                                        NULL, NULL,
+                                                                        &global_context->avrg_throttle_out, NULL)))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPluginEnable failed (XPLMRegisterDataAccessor)\n"); goto fail;
+    }
 
     /* TCA quadrant support: toggle on/off via menu */
     if (NULL == (global_context->id_th_on_off = XPLMCreateMenu(XNZ_XPLM_TITLE, NULL, 0, &menu_hdlr_fnc, global_context)))
@@ -1520,6 +1544,17 @@ PLUGIN_API void XPluginDisable(void)
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
 
     // TODO: fixme: un-register read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
+    /* Datarefs: axis input and XNZ-processed output */
+    if (global_context->f_throt_inn)
+    {
+        XPLMUnregisterDataAccessor(global_context->f_throt_inn);
+        global_context->f_throt_inn = NULL;
+    }
+    if (global_context->f_throt_out)
+    {
+        XPLMUnregisterDataAccessor(global_context->f_throt_out);
+        global_context->f_throt_out = NULL;
+    }
 
     /* re-enable throttle 1/2 axes */
     if (global_context->idx_throttle_axis_1 >= 0)
