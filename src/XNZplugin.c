@@ -1543,7 +1543,6 @@ PLUGIN_API void XPluginDisable(void)
 
     XPLMUnregisterFlightLoopCallback(global_context->f_l_th, global_context);
 
-    // TODO: fixme: un-register read-only datarefs to monitor raw axis input vs. commanded XNZ throttle
     /* Datarefs: axis input and XNZ-processed output */
     if (global_context->f_throt_inn)
     {
