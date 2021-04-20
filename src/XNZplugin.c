@@ -342,6 +342,12 @@ typedef struct
             XPLMDataRef drf_e_1_knb; // 1-sim/engine/leftStartSelector
             XPLMDataRef drf_e_2_knb; // 1-sim/engine/rightStartSelector
         } ff75;
+
+        struct
+        {
+            XPLMDataRef drf_e_1_ign; // thranda/electrical/StarterIgn (int; 0: AUTO, 1: ON)
+            XPLMDataRef drf_e_1_eng; // thranda/electrical/StarterEng (int; 0: CUT, 1: RUN)
+        } rptp;
     } et;
 
     enum
@@ -435,6 +441,7 @@ typedef struct
         XPLMDataRef pbrak_ratio; // sim/cockpit2/controls/parking_brake_ratio
         int         pbrak_onoff; // for manual braking: remember the pbrak state
         int         pbrakonoff2; // for xnz/brakes/regular/park
+        XPLMDataRef mixture_all; // sim/cockpit2/engine/actuators/mixture_ratio_all
     } xp;
 
     XPLMCommandRef cmd_rgb_pkb; // xnz/brakes/regular/park
@@ -1075,6 +1082,10 @@ PLUGIN_API int XPluginEnable(void)
     if (NULL == (global_context->commands.xp.pbrak_ratio = XPLMFindDataRef("sim/cockpit2/controls/parking_brake_ratio")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/controls/parking_brake_ratio)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.mixture_all = XPLMFindDataRef("sim/cockpit2/engine/actuators/mixture_ratio_all")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/engine/actuators/mixture_ratio_all)\n"); goto fail;
     }
     if (NULL == (global_context->commands.cmd_rgb_pkb = XPLMCreateCommand("xnz/brakes/regular/park", "hold brakes regular + set parking brake")))
     {
@@ -2185,8 +2196,37 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 {
                     if (auth_desc_icao)
                     {
-                        if (!strncasecmp(auth, "Denis 'ddenn' Krupin", strlen("Denis 'ddenn' Krupin")) &&
-                            !strncasecmp(desc, "Bombardier Challenger 300", strlen("Bombardier Challenger 300")))
+                        if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("thranda.xpl3d.cockpit"))) && (XPLMIsPluginEnabled(pid))))
+                        {
+                            if (!strncasecmp(auth, "Carenado", strlen("Carenado")) &&
+                                !strncasecmp(desc, "Pilatus PC12", strlen("Pilatus PC12")))
+                            {
+                                if (NULL == (global_context->commands.et.rptp.drf_e_1_ign = XPLMFindDataRef("thranda/electrical/StarterIgn")) ||
+                                    NULL == (global_context->commands.et.rptp.drf_e_1_eng = XPLMFindDataRef("thranda/electrical/StarterEng")))
+                                {
+                                    xnz_log("[error]: could not self-configure for PC12\n");
+                                    global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                                    global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                                    global_context->commands.xnz_at = XNZ_AT_ERRR;
+                                    global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                                    global_context->commands.xnz_et = XNZ_ET_ERRR;
+                                    global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                                    global_context->         xnz_tt = XNZ_TT_ERRR;
+                                }
+                                else
+                                {
+                                    global_context->commands.xnz_ab = XNZ_AB_NONE;
+                                    global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                                    global_context->commands.xnz_at = XNZ_AT_XPLM;
+                                    global_context->commands.xnz_bt = XNZ_BT_SIMC;
+                                    global_context->commands.xnz_et = XNZ_ET_RPTP;
+                                    global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                                    global_context->         xnz_tt = XNZ_TT_XPLM;
+                                }
+                            }
+                        }
+                        else if (!strncasecmp(auth, "Denis 'ddenn' Krupin", strlen("Denis 'ddenn' Krupin")) &&
+                                 !strncasecmp(desc, "Bombardier Challenger 300", strlen("Bombardier Challenger 300")))
                         {
                             global_context->commands.xnz_ab = XNZ_AB_NONE;
                             global_context->commands.xnz_ap = XNZ_AP_XPLM;
@@ -4001,6 +4041,19 @@ static int chandler_x_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
         }
         return 0;
     }
+    if (inPhase == xplm_CommandContinue)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_RPTP:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_eng, 1);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
     if (inPhase == xplm_CommandEnd)
     {
         switch (((xnz_cmd_context*)inRefcon)->xnz_et)
@@ -4080,6 +4133,19 @@ static int chandler_x_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                     XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->et.e35l.cmd_e_2_rgt);
                     return 0;
                 }
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    if (inPhase == xplm_CommandContinue)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_et)
+        {
+            case XNZ_ET_RPTP:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_eng, 0);
                 return 0;
 
             default:
@@ -4319,6 +4385,10 @@ static int chandler_m_12_cr(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 2.0f);
                 return 0;
 
+            case XNZ_ET_RPTP:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_ign, 0);
+                return 0;
+
             default:
                 break;
         }
@@ -4465,6 +4535,10 @@ static int chandler_m_12_no(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
             }
 
+            case XNZ_ET_RPTP:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_ign, 0);
+                return 0;
+
             default:
                 break;
         }
@@ -4560,6 +4634,10 @@ static int chandler_m_12_st(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
             case XNZ_ET_FF75:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_1_knb, 3.0f);
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 3.0f);
+                return 0;
+
+            case XNZ_ET_RPTP:
+                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_ign, 1);
                 return 0;
 
             default:
@@ -4808,6 +4886,10 @@ static int chandler_e_1_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 2);
                 return 0;
 
+            case XNZ_ET_RPTP:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, 0.5f + XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all));
+                return 0;
+
             default:
                 break;
         }
@@ -4871,6 +4953,10 @@ static int chandler_e_1_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
             case XNZ_ET_FF75:
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 0);
+                return 0;
+
+            case XNZ_ET_RPTP:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all) - 0.5f);
                 return 0;
 
             default:
@@ -4964,6 +5050,10 @@ static int chandler_e_2_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 2);
                 return 0;
 
+            case XNZ_ET_RPTP:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, 0.5f + XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all));
+                return 0;
+
             default:
                 break;
         }
@@ -5030,6 +5120,10 @@ static int chandler_e_2_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
             case XNZ_ET_FF75:
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 0);
+                return 0;
+
+            case XNZ_ET_RPTP:
+                XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all) - 0.5f);
                 return 0;
 
             default:
