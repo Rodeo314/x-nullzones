@@ -2380,8 +2380,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         }
                     }
                     global_context->skip_idle_overwrite = 0; XPLMSetFlightLoopCallbackInterval(global_context->f_l_th, 1, 1, global_context);
-                    xnz_log("setting TCA flight loop callback interval (enabled: %d)\n",
-                            global_context->tca_support_enabled == 0);
+                    xnz_log("setting TCA flight loop callback interval (enabled: %d)\n", global_context->tca_support_enabled);
                     xnz_log("engine type %d beta %d (%d) reverse %d (%d, %f)\n",
                             acf_en_type[0],
                             global_context->acf_has_beta_thrust,
