@@ -2913,7 +2913,7 @@ static inline float throttle_mapping_nl_rev(float input, thrust_zones z)
 {
     if (input > z.max[ZONE_TGA])
     {
-        return 1.00f; // max forward
+        return z.share[ZONE_TGA] + z.share[ZONE_FLX] + z.share[ZONE_CLB]; // max forward (may be less than 1.0f)
     }
     if (input > z.min[ZONE_TGA])
     {
