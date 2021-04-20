@@ -2334,6 +2334,12 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                             global_context->zones_info.share[ZONE_TGA] = 0.971875f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // ~100% N1
                             break;
 
+                        case XNZ_ET_RPTP:
+                            global_context->zones_info.share[ZONE_CLB] = 0.450000f; // low end of economy cruise (~28,000ft)
+                            global_context->zones_info.share[ZONE_FLX] = 0.700000f - global_context->zones_info.share[ZONE_CLB]; // ~95% NG @ PMDY/06
+                            global_context->zones_info.share[ZONE_TGA] = 0.984375f - global_context->zones_info.share[ZONE_FLX] - global_context->zones_info.share[ZONE_CLB]; // (1-(1/64))
+                            break;
+
                         default:
                             break;
                     }
