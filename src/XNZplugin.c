@@ -2990,7 +2990,7 @@ static int fwd_beta_rev_thrust_for_index(xnz_context *ctx, float f_stick_val[1],
     if (ctx->i_propmode_value[i] < 1 || // probably feathered
         ctx->i_propmode_value[i] > 3)  // should never happen
     {
-        f_stick_val[0] = 0.0f;
+//      f_stick_val[0] = 0.0f; // don't force idle thrust: it would only confuse users (myself included -- e.g. Carenado PC12 + REP automatically feathered until engine start)
         return 0;
     }
     if ((T_ZERO + f_stick_val[0]) < 0.0f) // reverse or beta range
