@@ -2595,15 +2595,20 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                     case 3:
                     case 4:
                     case 5:
-                        if (HS_TBM9_IDLE > (f_throttall = XPLMGetDataf(ctx->f_throttall)))
-                        {
-                            f_throttall = (0.0f - (1.0f - (f_throttall / HS_TBM9_IDLE)));
-                            break;
-                        }
-                        f_throttall = ((f_throttall - HS_TBM9_IDLE) / (1.0f - HS_TBM9_IDLE));
+                        /*
+                         * map f_throttall to percent of forward throttle travel
+                         * (ended up confusing me more than necessary: disabled)
+                         */
+//                      if (HS_TBM9_IDLE > (f_throttall = XPLMGetDataf(ctx->f_throttall)))
+//                      {
+//                          f_throttall = (0.0f - (1.0f - (f_throttall / HS_TBM9_IDLE)));
+//                          break;
+//                      }
+//                      f_throttall = ((f_throttall - HS_TBM9_IDLE) / (1.0f - HS_TBM9_IDLE));
+                        f_throttall = XPLMGetDataf(ctx->f_throttall);
                         break;
                     default:
-                        f_throttall = ctx->last_throttle_all;
+                        f_throttall = HS_TBM9_IDLE; // not in flight/beta/reverse range: throttle_ratio_all dataref has no effect on this TBM
                         break;
                 }
                 break;
@@ -2611,17 +2616,24 @@ static float callback_hdlr(float inElapsedSinceLastCall,
 
             default:
             {
-                f_throttall = XPLMGetDataf(ctx->f_throttall);
-                if (ctx->acft_has_rev_thrust && f_throttall > 0.0f)
+                if (ctx->acft_has_rev_thrust) // TODO: beta range support?
                 {
-                    XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
-                    if (ctx->i_propmode_value[0] == 3 || ctx->i_propmode_value[1] == 3)
+                    if ((f_throttall = XPLMGetDataf(ctx->f_throttall)) > 0.0f)
                     {
-                        f_throttall = 0.0f - f_throttall;
+                        if (1)
+                        {
+                            XPLMGetDatavi(ctx->i_prop_mode, ctx->i_propmode_value, 0, 2);
+                        }
+                        if (ctx->i_propmode_value[0] == 3 || ctx->i_propmode_value[1] == 3)
+                        {
+                            f_throttall = 0.0f - f_throttall;
+                            break;
+                        }
                         break;
                     }
                     break;
                 }
+                f_throttall = XPLMGetDataf(ctx->f_throttall);
                 break;
             }
         }
@@ -2634,7 +2646,7 @@ static float callback_hdlr(float inElapsedSinceLastCall,
                 ctx->idx_throttle_axis_1 >= 0 &&
                 ctx->skip_idle_overwrite == 0)
             {
-                ctx->show_throttle_all = 1.0f;
+                ctx->show_throttle_all = 1.5f;
             }
         }
         if (ctx->show_throttle_all < T_ZERO ||
