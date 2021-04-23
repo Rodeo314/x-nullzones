@@ -266,7 +266,7 @@ typedef struct
             XPLMCommandRef cmd_m_12_cr; // tbm900/actuators/elec/ignition_off
             XPLMCommandRef cmd_m_12_no; // tbm900/actuators/elec/ignition_auto
             XPLMCommandRef cmd_m_12_st; // tbm900/actuators/elec/ignition_on
-            XPLMDataRef    drf_fuelsel; // tbm900/switches/fuel/auto_man
+//          XPLMDataRef    drf_fuelsel; // tbm900/switches/fuel/auto_man
         } tbm9;
 
         struct
@@ -2062,7 +2062,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         NULL == (global_context->commands.bt.tbm9.rbrak_array = XPLMFindDataRef("tbm900/controls/gear/brake_req"     )) ||
                         NULL == (global_context->commands.pb.tbm9.pbrak_ratio = XPLMFindDataRef("tbm900/switches/gear/park_brake"    )) ||
                         NULL == (global_context->commands.bt.tbm9.br_override = XPLMFindDataRef("tbm900/controls/gear/brake_req_ovrd")) ||
-                        NULL == (global_context->commands.et.tbm9.drf_fuelsel = XPLMFindDataRef("tbm900/switches/fuel/auto_man"      )) ||
+//                      NULL == (global_context->commands.et.tbm9.drf_fuelsel = XPLMFindDataRef("tbm900/switches/fuel/auto_man"      )) ||
                         NULL == (global_context->commands.et.tbm9.cmd_e_1_onn = XPLMFindCommand("sim/engines/mixture_up"             )) ||
                         NULL == (global_context->commands.et.tbm9.cmd_e_1_off = XPLMFindCommand("sim/engines/mixture_down"           )) ||
                         NULL == (global_context->commands.et.tbm9.cmd_x_12_lt = XPLMFindCommand("tbm900/actuators/elec/starter_up"   )) ||
@@ -4862,7 +4862,7 @@ static int chandler_e_1_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_ET_TBM9:
-                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_onn);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_onn); // cutoff -> low idle
                 return 0;
 
             case XNZ_ET_XPPI:
@@ -4932,7 +4932,7 @@ static int chandler_e_1_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_ET_TBM9:
-                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_off);
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_off); // low idle -> cutoff
                 return 0;
 
             case XNZ_ET_XPPI:
@@ -5025,7 +5025,9 @@ static int chandler_e_2_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_ET_TBM9:
-                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.tbm9.drf_fuelsel, 0); // FUEL SEL switch position. 0 = AUTO, 1 = MAN.
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_onn); // low -> high idle
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_onn); // high -> flight idle
+//              XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.tbm9.drf_fuelsel, 0); // FUEL SEL switch position. 0 = AUTO, 1 = MAN.
                 return 0;
 
             case XNZ_ET_XPPI:
@@ -5098,7 +5100,9 @@ static int chandler_e_2_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_ET_TBM9:
-                XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.tbm9.drf_fuelsel, 1); // FUEL SEL switch position. 0 = AUTO, 1 = MAN.
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_off); // flight -> high idle
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.tbm9.cmd_e_1_off); // high -> low idle
+//              XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.tbm9.drf_fuelsel, 1); // FUEL SEL switch position. 0 = AUTO, 1 = MAN.
                 return 0;
 
             case XNZ_ET_XPPI:
