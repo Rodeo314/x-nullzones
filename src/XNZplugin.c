@@ -4904,6 +4904,7 @@ static int chandler_e_1_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 2);
                 return 0;
 
+            case XNZ_ET_XPTP:
             case XNZ_ET_RPTP:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, 0.5f + XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all));
                 return 0;
@@ -4973,6 +4974,7 @@ static int chandler_e_1_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_1_cut, 0);
                 return 0;
 
+            case XNZ_ET_XPTP:
             case XNZ_ET_RPTP:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all) - 0.5f);
                 return 0;
@@ -5068,6 +5070,7 @@ static int chandler_e_2_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 2);
                 return 0;
 
+            case XNZ_ET_XPTP:
             case XNZ_ET_RPTP:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, 0.5f + XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all));
                 return 0;
@@ -5140,6 +5143,7 @@ static int chandler_e_2_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.ix73.drf_e_2_cut, 0);
                 return 0;
 
+            case XNZ_ET_XPTP:
             case XNZ_ET_RPTP:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all) - 0.5f);
                 return 0;
