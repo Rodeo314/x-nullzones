@@ -408,6 +408,10 @@ typedef struct
         XPLMCommandRef at_at_n1; // sim/autopilot/autothrottle_n1epr
         XPLMCommandRef ap_to_ga; // sim/autopilot/take_off_go_around
         XPLMCommandRef ap_cw_st; // sim/autopilot/control_wheel_steer
+        XPLMCommandRef ap_fd_dn; // sim/autopilot/fdir_servos_down_one
+        XPLMCommandRef ap_ap_on; // sim/autopilot/servos_on
+        XPLMCommandRef ap_yd_no; // sim/systems/yaw_damper_off
+        XPLMCommandRef ap_yd_on; // sim/systems/yaw_damper_on
         XPLMCommandRef p_start1; // sim/starters/engage_starter_1
         XPLMCommandRef p_mboth1; // sim/magnetos/magnetos_both_1
         XPLMCommandRef p_m_lft1; // sim/magnetos/magnetos_left_1
@@ -450,7 +454,10 @@ typedef struct
     XPLMCommandRef cmd_pkb_onh; // xnz/brakes/park/on/hold
     XPLMCommandRef cmd_pkb_onn; // xnz/brakes/park/on/set
     XPLMCommandRef cmd_pkb_off; // xnz/brakes/park/unset
+    XPLMCommandRef cmd_a_p_onn; // xnz/auto/pilot/pu/sh
+    XPLMCommandRef cmd_a_p_off; // xnz/auto/pilot/di/sc
     XPLMCommandRef cmd_at_toga; // xnz/auto/thrust/to/ga
+    XPLMCommandRef cmd_at_disc; // xnz/auto/thrust/di/sc
     XPLMCommandRef cmd_a_12_lt; // xnz/tca/12/at/disc/lt
     XPLMCommandRef cmd_a_12_rt; // xnz/tca/12/at/disc/rt
     XPLMCommandRef cmd_a_34_lt; // xnz/tca/34/at/disc/lt
@@ -489,7 +496,10 @@ static int chandler_pkb_tog(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 static int chandler_pkb_onh(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_pkb_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_pkb_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_a_p_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_a_p_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_at_disc(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_a_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_a_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_a_34_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
@@ -959,6 +969,22 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/control_wheel_steer)\n"); goto fail;
     }
+    if (NULL == (global_context->commands.xp.ap_fd_dn = XPLMFindCommand("sim/autopilot/fdir_servos_down_one")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/fdir_servos_down_one)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ap_ap_on = XPLMFindCommand("sim/autopilot/servos_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/autopilot/servos_on)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ap_yd_no = XPLMFindCommand("sim/systems/yaw_damper_off")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/systems/yaw_damper_off)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ap_yd_on = XPLMFindCommand("sim/systems/yaw_damper_on")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/systems/yaw_damper_on)\n"); goto fail;
+    }
     if (NULL == (global_context->commands.xp.p_start1 = XPLMFindCommand("sim/starters/engage_starter_1")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/starters/engage_starter_1)\n"); goto fail;
@@ -1135,6 +1161,22 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMRegisterCommandHandler(global_context->commands.cmd_pkb_off, &chandler_pkb_off, 0, &global_context->commands);
     }
+    if (NULL == (global_context->commands.cmd_a_p_onn = XPLMCreateCommand("xnz/auto/pilot/pu/sh", "autopilot engage servos")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/auto/pilot/pu/sh)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_a_p_onn, &chandler_a_p_onn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_a_p_off = XPLMCreateCommand("xnz/auto/pilot/di/sc", "autopilot disconnect servos")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/auto/pilot/di/sc)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_a_p_off, &chandler_a_p_off, 0, &global_context->commands);
+    }
     if (NULL == (global_context->commands.cmd_at_toga = XPLMCreateCommand("xnz/auto/thrust/to/ga", "A/T takeoff/go-around")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/auto/thrust/to/ga)\n"); goto fail;
@@ -1142,6 +1184,14 @@ PLUGIN_API int XPluginEnable(void)
     else
     {
         XPLMRegisterCommandHandler(global_context->commands.cmd_at_toga, &chandler_at_toga, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_at_disc = XPLMCreateCommand("xnz/auto/thrust/di/sc", "A/T disconnect")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/auto/thrust/di/sc)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_at_disc, &chandler_at_disc, 0, &global_context->commands);
     }
     if (NULL == (global_context->commands.cmd_a_12_lt = XPLMCreateCommand("xnz/tca/12/at/disc/lt", "TCA 1&2: lt A/T disconnect")))
     {
@@ -1519,7 +1569,10 @@ PLUGIN_API void XPluginDisable(void)
     if (global_context->commands.cmd_pkb_onh) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_onh, &chandler_pkb_onh, 0, &global_context->commands);
     if (global_context->commands.cmd_pkb_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_onn, &chandler_pkb_onn, 0, &global_context->commands);
     if (global_context->commands.cmd_pkb_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_off, &chandler_pkb_off, 0, &global_context->commands);
+    if (global_context->commands.cmd_a_p_onn) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_p_onn, &chandler_a_p_onn, 0, &global_context->commands);
+    if (global_context->commands.cmd_a_p_off) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_p_off, &chandler_a_p_off, 0, &global_context->commands);
     if (global_context->commands.cmd_at_toga) XPLMUnregisterCommandHandler(global_context->commands.cmd_at_toga, &chandler_at_toga, 0, &global_context->commands);
+    if (global_context->commands.cmd_at_disc) XPLMUnregisterCommandHandler(global_context->commands.cmd_at_disc, &chandler_at_disc, 0, &global_context->commands);
     if (global_context->commands.cmd_a_12_lt) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_12_lt, &chandler_a_12_lt, 0, &global_context->commands);
     if (global_context->commands.cmd_a_12_rt) XPLMUnregisterCommandHandler(global_context->commands.cmd_a_12_rt, &chandler_a_12_rt, 0, &global_context->commands);
     if (global_context->commands.cmd_x_12_lt) XPLMUnregisterCommandHandler(global_context->commands.cmd_x_12_lt, &chandler_x_12_lt, 0, &global_context->commands);
@@ -3864,6 +3917,57 @@ static int chandler_pkb_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
     return 0;
 }
 
+static int chandler_a_p_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_ap)
+        {
+            case XNZ_AP_XPLM:
+            case XNZ_AP_XGFC:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_ap_on);
+//              XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_yd_on); // TODO: when do we need this???
+                return 0;
+
+            case XNZ_AP_COMM:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->ap.comm.cmd_ap_conn);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_a_p_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_ap)
+        {
+            case XNZ_AP_XPLM:
+            case XNZ_AP_XGFC:
+                if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.auto_pil_on) > 0)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_fd_dn);
+                }
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ap_yd_no);
+                return 0;
+
+            case XNZ_AP_COMM:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->ap.comm.cmd_ap_disc);
+                return 0;
+
+            default:
+                break;
+        }
+        return 0;
+    }
+    return 0;
+}
+
 static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
 {
     if (inPhase == xplm_CommandBegin)
@@ -3918,6 +4022,35 @@ static int chandler_at_toga(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_AT_ERRR:
+            case XNZ_AT_TOGG:
+//          case XNZ_AT_DISC:
+            default:
+                return 0;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_at_disc(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        switch (((xnz_cmd_context*)inRefcon)->xnz_at)
+        {
+            case XNZ_AT_XP11:
+            case XNZ_AT_XPLM:
+            case XNZ_AT_TOLI:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.at_at_no);
+                return 0;
+
+            case XNZ_AT_COMM:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->at.comm.cmd_at_disc);
+                return 0;
+
+            case XNZ_AT_APTO:
+            case XNZ_AT_ERRR:
+            case XNZ_AT_NONE:
             case XNZ_AT_TOGG:
 //          case XNZ_AT_DISC:
             default:
