@@ -2862,6 +2862,16 @@ static inline float jitter_protection(float input)
     return roundf(input / T_SMALL) * T_SMALL;
 }
 
+/*
+ * https://forums.x-plane.org/index.php?/forums/topic/244181-phenom-300-throttle-quadrant-detents/&do=findComment&comment=2178232
+ * https://www.omnicalculator.com/math/rounding
+ * travel = angle / max_angle = angle / 73
+ * 69 to 73°: MAX RSV
+ * 59 to 63°: MAX TO/GA
+ * 49 to 53°: MAX CON/CLB
+ * 38 to 42°: MAX CRZ
+ * 00 to 04°: IDLE
+ */
 static inline float throttle_mapping_abe55p(float input, thrust_zones z)
 {
     if (input > z.min[ZONE_TGA])
@@ -2883,7 +2893,7 @@ static inline float throttle_mapping_abe55p(float input, thrust_zones z)
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return jitter_protection(38.0f * linear_standard(t) / 73.0f);
+        return jitter_protection((4.0f + ((38.0f - 4.0f) * linear_standard(t))) / 73.0f);
     }
     return 0.0f; // no reverse
 }
