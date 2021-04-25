@@ -2866,24 +2866,24 @@ static inline float throttle_mapping_abe55p(float input, thrust_zones z)
 {
     if (input > z.min[ZONE_TGA])
     {
-        return 0.8356f; // TO
+        return 61.0f / 73.0f; // TO
     }
 //  if (input > z.max[ZONE_FLX])
 //  {
-//      return 0.6986f; // CLB
+//      return 51.0f / 73.0f; // CLB
 //  }
     if (input > z.min[ZONE_FLX])
     {
-        return 0.6986f; // CLB
+        return 51.0f / 73.0f; // CLB
     }
     if (input > z.max[ZONE_CLB])
     {
-        return 0.5479f; // CRZ
+        return 40.0f / 73.0f; // CRZ
     }
     if (input > z.min[ZONE_CLB])
     {
         float t = (input - z.min[ZONE_CLB]) / z.len[ZONE_CLB];
-        return jitter_protection(0.5205f * linear_standard(t));
+        return jitter_protection(38.0f * linear_standard(t) / 73.0f);
     }
     return 0.0f; // no reverse
 }
