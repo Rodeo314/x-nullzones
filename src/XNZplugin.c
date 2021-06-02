@@ -86,6 +86,7 @@ typedef struct
 
 typedef struct
 {
+    int xp_11_00_or_later;
     int xp_11_50_or_later;
 
     enum
@@ -1433,6 +1434,7 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMRegisterCommandHandler(global_context->commands.cmd_e_4_off, &chandler_e_4_off, 0, &global_context->commands);
     }
+    global_context->commands.xp_11_00_or_later = (outXPlaneVersion > 10999);
     global_context->commands.xp_11_50_or_later = (outXPlaneVersion > 11499);
 #endif
 
@@ -1829,7 +1831,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 if (global_context->commands.xnz_ap == XNZ_AP_ERRR)
                 {
-                    if (NULL != XPLMFindDataRef("sim/version/xplane_internal_version")) // lazy XP11+ detection
+                    if (global_context->commands.xp_11_00_or_later)
                     {
                         if ((ref = XPLMFindDataRef("sim/aircraft/autopilot/preconfigured_ap_type")))
                         {
@@ -1854,7 +1856,7 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 if (global_context->commands.xnz_at == XNZ_AT_ERRR)
                 {
-                    if (NULL != XPLMFindDataRef("sim/version/xplane_internal_version")) // lazy XP11+ detection
+                    if (global_context->commands.xp_11_00_or_later)
                     {
                         if ((ref = XPLMFindDataRef("sim/aircraft/autopilot/preconfigured_ap_type")))
                         {
@@ -3645,8 +3647,19 @@ static int chandler_rgb_hld(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
         case xplm_CommandContinue:
         {
-            float groundspeed = XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.groundspeed);
-            int speed = (50.0 < MPS2KTS(groundspeed)) ? 2 : (15.0f < MPS2KTS(groundspeed)) ? 1: 0;
+            int speed = 0; float gs = MPS2KTS(XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.groundspeed));
+            if (((xnz_cmd_context*)inRefcon)->xp_11_00_or_later && gs < GROUNDSP_KTS_MIN)
+            {
+                speed = 1;
+            }
+            if (gs > 15.0f)
+            {
+                speed = 1;
+            }
+            if (gs > 50.0f)
+            {
+                speed = 2;
+            }
             switch (((xnz_cmd_context*)inRefcon)->xnz_bt)
             {
                 case XNZ_BT_XPLM:
