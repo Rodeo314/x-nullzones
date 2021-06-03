@@ -359,6 +359,9 @@ typedef struct
             XPLMCommandRef cmd_e_2_off; // aerobask/mag2_off
             XPLMCommandRef cmd_e_1_onn; // aerobask/mag1_on
             XPLMCommandRef cmd_e_2_onn; // aerobask/mag2_on
+            XPLMCommandRef cmd_f_sl_rt; // aerobask/legacy/fuel_sel_right
+            XPLMCommandRef cmd_f_sl_lt; // aerobask/legacy/fuel_sel_left
+            XPLMDataRef    drf_fuelsel; // aerobask/legacy/fuel_selector
         } leg2;
     } et;
 
@@ -2241,12 +2244,15 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                 }
                 else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("1-sim Legacy_RG"))) && (XPLMIsPluginEnabled(pid))))
                 {
-                    if (NULL == (global_context->commands.et.leg2.cmd_m_12_no = XPLMFindCommand("sim/fuel/fuel_pump_1_off")) ||
-                        NULL == (global_context->commands.et.leg2.cmd_m_12_st = XPLMFindCommand("sim/fuel/fuel_pump_1_on" )) ||
-                        NULL == (global_context->commands.et.leg2.cmd_e_1_off = XPLMFindCommand("aerobask/mag1_off"       )) ||
-                        NULL == (global_context->commands.et.leg2.cmd_e_2_off = XPLMFindCommand("aerobask/mag2_off"       )) ||
-                        NULL == (global_context->commands.et.leg2.cmd_e_1_onn = XPLMFindCommand("aerobask/mag1_on"        )) ||
-                        NULL == (global_context->commands.et.leg2.cmd_e_2_onn = XPLMFindCommand("aerobask/mag2_on"       )))
+                    if (NULL == (global_context->commands.et.leg2.cmd_f_sl_rt = XPLMFindCommand("aerobask/legacy/fuel_sel_right")) ||
+                        NULL == (global_context->commands.et.leg2.cmd_f_sl_lt = XPLMFindCommand("aerobask/legacy/fuel_sel_left" )) ||
+                        NULL == (global_context->commands.et.leg2.drf_fuelsel = XPLMFindDataRef("aerobask/legacy/fuel_selector" )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_m_12_no = XPLMFindCommand("sim/fuel/fuel_pump_1_off"      )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_m_12_st = XPLMFindCommand("sim/fuel/fuel_pump_1_on"       )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_1_off = XPLMFindCommand("aerobask/mag1_off"             )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_2_off = XPLMFindCommand("aerobask/mag2_off"             )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_1_onn = XPLMFindCommand("aerobask/mag1_on"              )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_2_onn = XPLMFindCommand("aerobask/mag2_on"             )))
                     {
                         xnz_log("[error]: could not self-configure for LEG2\n");
                         global_context->commands.xnz_ab = XNZ_AB_ERRR;
@@ -4517,6 +4523,24 @@ static int chandler_x_12_rt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 }
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->et.ff75.drf_e_2_knb, 4.0f);
                 return 0;
+
+            case XNZ_ET_LEG2:
+            {
+                float fuelsel = XPLMGetDataf(((xnz_cmd_context*)inRefcon)->et.leg2.drf_fuelsel);
+                if (0.5f > fuelsel)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_f_sl_lt);
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_f_sl_lt);
+                    return 0; // off -> left
+                }
+                if (1.5f > fuelsel)
+                {
+                    XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_f_sl_lt);
+                    return 0; // right -> left
+                }
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_f_sl_rt);
+                return 0; // left -> right
+            }
 
             default:
                 break;
