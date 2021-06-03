@@ -226,6 +226,7 @@ typedef struct
         XNZ_ET_FF35 = 350,
         XNZ_ET_E55P = 535,
         XNZ_ET_PIPA = 540,
+        XNZ_ET_LEG2 = 550,
         XNZ_ET_EA50 = 610,
         XNZ_ET_EVIC = 617,
         XNZ_ET_CL30 = 700,
@@ -349,6 +350,16 @@ typedef struct
             XPLMDataRef drf_e_1_ign; // thranda/electrical/StarterIgn (int; 0: AUTO, 1: ON)
             XPLMDataRef drf_e_1_eng; // thranda/electrical/StarterEng (int; 0: CUT, 1: RUN)
         } rptp;
+
+        struct
+        {
+            XPLMCommandRef cmd_m_12_no; // sim/fuel/fuel_pump_1_off
+            XPLMCommandRef cmd_m_12_st; // sim/fuel/fuel_pump_1_on
+            XPLMCommandRef cmd_e_1_off; // aerobask/mag1_off
+            XPLMCommandRef cmd_e_2_off; // aerobask/mag2_off
+            XPLMCommandRef cmd_e_1_onn; // aerobask/mag1_on
+            XPLMCommandRef cmd_e_2_onn; // aerobask/mag2_on
+        } leg2;
     } et;
 
     enum
@@ -2224,6 +2235,35 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
                         global_context->commands.xnz_at = XNZ_AT_NONE;
                         global_context->commands.xnz_bt = XNZ_BT_XPLM;
                         global_context->commands.xnz_et = XNZ_ET_DA62;
+                        global_context->commands.xnz_pb = XNZ_PB_XPLM;
+                        global_context->         xnz_tt = XNZ_TT_XPLM;
+                    }
+                }
+                else if (((XPLM_NO_PLUGIN_ID != (pid = XPLMFindPluginBySignature("1-sim Legacy_RG"))) && (XPLMIsPluginEnabled(pid))))
+                {
+                    if (NULL == (global_context->commands.et.leg2.cmd_m_12_no = XPLMFindCommand("sim/fuel/fuel_pump_1_off")) ||
+                        NULL == (global_context->commands.et.leg2.cmd_m_12_st = XPLMFindCommand("sim/fuel/fuel_pump_1_on" )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_1_off = XPLMFindCommand("aerobask/mag1_off"       )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_2_off = XPLMFindCommand("aerobask/mag2_off"       )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_1_onn = XPLMFindCommand("aerobask/mag1_on"        )) ||
+                        NULL == (global_context->commands.et.leg2.cmd_e_2_onn = XPLMFindCommand("aerobask/mag2_on"       )))
+                    {
+                        xnz_log("[error]: could not self-configure for LEG2\n");
+                        global_context->commands.xnz_ab = XNZ_AB_ERRR;
+                        global_context->commands.xnz_ap = XNZ_AP_ERRR;
+                        global_context->commands.xnz_at = XNZ_AT_ERRR;
+                        global_context->commands.xnz_bt = XNZ_BT_ERRR;
+                        global_context->commands.xnz_et = XNZ_ET_ERRR;
+                        global_context->commands.xnz_pb = XNZ_PB_ERRR;
+                        global_context->         xnz_tt = XNZ_TT_ERRR;
+                    }
+                    else
+                    {
+                        global_context->commands.xnz_ab = XNZ_AB_NONE;
+                        global_context->commands.xnz_ap = XNZ_AP_XPLM;
+                        global_context->commands.xnz_at = XNZ_AT_NONE;
+                        global_context->commands.xnz_bt = XNZ_BT_XPLM;
+                        global_context->commands.xnz_et = XNZ_ET_LEG2;
                         global_context->commands.xnz_pb = XNZ_PB_XPLM;
                         global_context->         xnz_tt = XNZ_TT_XPLM;
                     }
@@ -4297,6 +4337,7 @@ static int chandler_x_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_ET_DA62:
+            case XNZ_ET_LEG2:
             case XNZ_ET_XPPI:
                 XPLMCommandBegin(((xnz_cmd_context*)inRefcon)->xp.p_start1);
                 return 0;
@@ -4336,6 +4377,7 @@ static int chandler_x_12_lt(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 return 0;
 
             case XNZ_ET_DA62:
+            case XNZ_ET_LEG2:
             case XNZ_ET_XPPI:
                 XPLMCommandEnd(((xnz_cmd_context*)inRefcon)->xp.p_start1);
                 return 0;
@@ -4812,6 +4854,10 @@ static int chandler_m_12_no(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_ign, 0);
                 return 0;
 
+            case XNZ_ET_LEG2:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_m_12_no);
+                return 0;
+
             default:
                 break;
         }
@@ -4911,6 +4957,10 @@ static int chandler_m_12_st(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
 
             case XNZ_ET_RPTP:
                 XPLMSetDatai(((xnz_cmd_context*)inRefcon)->et.rptp.drf_e_1_ign, 1);
+                return 0;
+
+            case XNZ_ET_LEG2:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_m_12_st);
                 return 0;
 
             default:
@@ -5164,6 +5214,10 @@ static int chandler_e_1_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, 0.5f + XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all));
                 return 0;
 
+            case XNZ_ET_LEG2:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_e_1_onn);
+                return 0;
+
             default:
                 break;
         }
@@ -5232,6 +5286,10 @@ static int chandler_e_1_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
             case XNZ_ET_XPTP:
             case XNZ_ET_RPTP:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all) - 0.5f);
+                return 0;
+
+            case XNZ_ET_LEG2:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_e_1_off);
                 return 0;
 
             default:
@@ -5332,6 +5390,10 @@ static int chandler_e_2_onn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, 0.5f + XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all));
                 return 0;
 
+            case XNZ_ET_LEG2:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_e_2_onn);
+                return 0;
+
             default:
                 break;
         }
@@ -5405,6 +5467,10 @@ static int chandler_e_2_off(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, 
             case XNZ_ET_XPTP:
             case XNZ_ET_RPTP:
                 XPLMSetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all, XPLMGetDataf(((xnz_cmd_context*)inRefcon)->xp.mixture_all) - 0.5f);
+                return 0;
+
+            case XNZ_ET_LEG2:
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->et.leg2.cmd_e_2_off);
                 return 0;
 
             default:
