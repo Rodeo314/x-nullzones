@@ -433,6 +433,8 @@ typedef struct
         XPLMCommandRef p_m_lft4; // sim/magnetos/magnetos_left_4
         XPLMCommandRef p_m_rgt4; // sim/magnetos/magnetos_right_4
         XPLMCommandRef p_mstop4; // sim/magnetos/magnetos_off_4
+        XPLMCommandRef ld_gr_up; // sim/flight_controls/landing_gear_up
+        XPLMCommandRef ld_gr_dn; // sim/flight_controls/landing_gear_down
         XPLMDataRef auto_pil_on; // sim/cockpit2/autopilot/servos_on
         XPLMDataRef auto_vvi_on; // sim/cockpit2/autopilot/vvi_status
         XPLMDataRef auto_thr_on; // sim/cockpit2/autopilot/autothrottle_on
@@ -444,11 +446,15 @@ typedef struct
         XPLMDataRef l_rgb_ratio; // sim/cockpit2/controls/left_brake_ratio
         XPLMDataRef r_rgb_ratio; // sim/cockpit2/controls/right_brake_ratio
         XPLMDataRef pbrak_ratio; // sim/cockpit2/controls/parking_brake_ratio
+        XPLMDataRef gear_handle; // sim/cockpit2/controls/gear_handle_down
         int         pbrak_onoff; // for manual braking: remember the pbrak state
         int         pbrakonoff2; // for xnz/brakes/regular/park
         XPLMDataRef mixture_all; // sim/cockpit2/engine/actuators/mixture_ratio_all
     } xp;
 
+    XPLMCommandRef cmd_ldg_upp; // xnz/landing/gear/up
+    XPLMCommandRef cmd_ldg_dwn; // xnz/landing/gear/down
+    XPLMCommandRef cmd_ldg_tog; // xnz/landing/gear/toggle
     XPLMCommandRef cmd_rgb_pkb; // xnz/brakes/regular/park
     XPLMCommandRef cmd_rgb_hld; // xnz/brakes/regular/hold
     XPLMCommandRef cmd_pkb_tog; // xnz/brakes/park/toggle
@@ -491,6 +497,9 @@ typedef struct
     XPLMCommandRef cmd_e_4_off; // xnz/tca/engines/4/off
 } xnz_cmd_context;
 
+static int chandler_ldg_upp(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_ldg_dwn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
+static int chandler_ldg_tog(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_rgb_pkb(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_rgb_hld(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
 static int chandler_pkb_tog(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon);
@@ -1066,6 +1075,14 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/magnetos/magnetos_off_4)\n"); goto fail;
     }
+    if (NULL == (global_context->commands.xp.ld_gr_up = XPLMFindCommand("sim/flight_controls/landing_gear_up")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/flight_controls/landing_gear_up)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.xp.ld_gr_dn = XPLMFindCommand("sim/flight_controls/landing_gear_down")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindCommand failed (sim/flight_controls/landing_gear_down)\n"); goto fail;
+    }
     if (NULL == (global_context->commands.xp.auto_pil_on = XPLMFindDataRef("sim/cockpit2/autopilot/servos_on")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/autopilot/servos_on)\n"); goto fail;
@@ -1110,9 +1127,37 @@ PLUGIN_API int XPluginEnable(void)
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/controls/parking_brake_ratio)\n"); goto fail;
     }
+    if (NULL == (global_context->commands.xp.gear_handle = XPLMFindDataRef("sim/cockpit2/controls/gear_handle_down")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/controls/gear_handle_down)\n"); goto fail;
+    }
     if (NULL == (global_context->commands.xp.mixture_all = XPLMFindDataRef("sim/cockpit2/engine/actuators/mixture_ratio_all")))
     {
         XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMFindDataRef failed (sim/cockpit2/engine/actuators/mixture_ratio_all)\n"); goto fail;
+    }
+    if (NULL == (global_context->commands.cmd_ldg_upp = XPLMCreateCommand("xnz/landing/gear/up", "landing gear up")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/landing/gear/up)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_ldg_upp, &chandler_ldg_upp, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_ldg_dwn = XPLMCreateCommand("xnz/landing/gear/down", "landing gear down")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/landing/gear/down)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_ldg_dwn, &chandler_ldg_dwn, 0, &global_context->commands);
+    }
+    if (NULL == (global_context->commands.cmd_ldg_tog = XPLMCreateCommand("xnz/landing/gear/toggle", "landing gear toggle")))
+    {
+        XPLMDebugString(XNZ_LOG_PREFIX"[error]: XPLMCreateCommand failed (xnz/landing/gear/toggle)\n"); goto fail;
+    }
+    else
+    {
+        XPLMRegisterCommandHandler(global_context->commands.cmd_ldg_tog, &chandler_ldg_tog, 0, &global_context->commands);
     }
     if (NULL == (global_context->commands.cmd_rgb_pkb = XPLMCreateCommand("xnz/brakes/regular/park", "hold brakes regular + set parking brake")))
     {
@@ -1565,6 +1610,9 @@ PLUGIN_API void XPluginDisable(void)
     {
         XPLMUnregisterCommandHandler(global_context->print_ax, &chandler_printax, 0, global_context);
     }
+    if (global_context->commands.cmd_ldg_upp) XPLMUnregisterCommandHandler(global_context->commands.cmd_ldg_upp, &chandler_ldg_upp, 0, &global_context->commands);
+    if (global_context->commands.cmd_ldg_dwn) XPLMUnregisterCommandHandler(global_context->commands.cmd_ldg_dwn, &chandler_ldg_dwn, 0, &global_context->commands);
+    if (global_context->commands.cmd_ldg_tog) XPLMUnregisterCommandHandler(global_context->commands.cmd_ldg_tog, &chandler_ldg_tog, 0, &global_context->commands);
     if (global_context->commands.cmd_rgb_pkb) XPLMUnregisterCommandHandler(global_context->commands.cmd_rgb_pkb, &chandler_rgb_pkb, 0, &global_context->commands);
     if (global_context->commands.cmd_rgb_hld) XPLMUnregisterCommandHandler(global_context->commands.cmd_rgb_hld, &chandler_rgb_hld, 0, &global_context->commands);
     if (global_context->commands.cmd_pkb_tog) XPLMUnregisterCommandHandler(global_context->commands.cmd_pkb_tog, &chandler_pkb_tog, 0, &global_context->commands);
@@ -3566,6 +3614,57 @@ static int parking_brake_set(xnz_cmd_context *commands, int set)
         return -1;
     }
     return -1;
+}
+
+static int chandler_ldg_upp(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (inRefcon)
+        {
+            XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ld_gr_up);
+            XPLMSpeakString("gear up");
+            return 0;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_ldg_dwn(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (inRefcon)
+        {
+            XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ld_gr_dn);
+            XPLMSpeakString("gear down");
+            return 0;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int chandler_ldg_tog(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
+{
+    if (inPhase == xplm_CommandEnd)
+    {
+        if (inRefcon)
+        {
+            if (XPLMGetDatai(((xnz_cmd_context*)inRefcon)->xp.gear_handle) == 1)
+            {
+                XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ld_gr_up);
+                XPLMSpeakString("gear up");
+                return 0;
+            }
+            XPLMCommandOnce(((xnz_cmd_context*)inRefcon)->xp.ld_gr_dn);
+            XPLMSpeakString("gear down");
+            return 0;
+        }
+        return 0;
+    }
+    return 0;
 }
 
 static int chandler_rgb_pkb(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void *inRefcon)
